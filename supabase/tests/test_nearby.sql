@@ -2,15 +2,15 @@
 \set ON_ERROR_STOP 0
 \set QUIET on
 INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"full_name":"Anna"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"full_name":"Bob"}'),
-  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"full_name":"Chris"}'),
-  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"full_name":"Dora"}'),
-  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"full_name":"Eva"}'),
-  ('00000000-0000-0000-0000-00000000000f', 'fay@x', '{"full_name":"Fay"}'),
-  ('00000000-0000-0000-0000-000000000010', 'gus@x', '{"full_name":"Gus"}'),
-  ('00000000-0000-0000-0000-000000000011', 'hal@x', '{"full_name":"Hal"}'),
-  ('00000000-0000-0000-0000-000000000012', 'ivy@x', '{"full_name":"Ivy"}');
+  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"age_confirmed":true,"full_name":"Anna"}'),
+  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"age_confirmed":true,"full_name":"Bob"}'),
+  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"age_confirmed":true,"full_name":"Chris"}'),
+  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"age_confirmed":true,"full_name":"Dora"}'),
+  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"age_confirmed":true,"full_name":"Eva"}'),
+  ('00000000-0000-0000-0000-00000000000f', 'fay@x', '{"age_confirmed":true,"full_name":"Fay"}'),
+  ('00000000-0000-0000-0000-000000000010', 'gus@x', '{"age_confirmed":true,"full_name":"Gus"}'),
+  ('00000000-0000-0000-0000-000000000011', 'hal@x', '{"age_confirmed":true,"full_name":"Hal"}'),
+  ('00000000-0000-0000-0000-000000000012', 'ivy@x', '{"age_confirmed":true,"full_name":"Ivy"}');
 -- Anna and Gus are friends (mutual follows).
 INSERT INTO public.follows (follower_id, followee_id) VALUES
   ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-000000000010'),
@@ -162,7 +162,7 @@ RESET ROLE;
 
 -- 05 limits: 30 different people an hour
 INSERT INTO auth.users (id, email, raw_user_meta_data)
-SELECT ('00000000-0000-0000-0001-' || lpad(g::text, 12, '0'))::uuid, 'p' || g || '@x', '{"full_name":"P"}'
+SELECT ('00000000-0000-0000-0001-' || lpad(g::text, 12, '0'))::uuid, 'p' || g || '@x', '{"age_confirmed":true,"full_name":"P"}'
 FROM generate_series(1, 30) g;
 INSERT INTO private.nearby_knocks (sender_id, recipient_id, created_at)
 SELECT :A, ('00000000-0000-0000-0001-' || lpad(g::text, 12, '0'))::uuid, now() - interval '10 minutes'

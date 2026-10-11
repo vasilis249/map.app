@@ -85,6 +85,9 @@ CREATE TABLE public.profiles (
   bio text NOT NULL DEFAULT '' CHECK (char_length(bio) <= 160),
   avatar_path text CHECK (avatar_path IS NULL OR char_length(avatar_path) <= 200),
   disabled boolean NOT NULL DEFAULT false,
+  -- The person declared they are 18 or older (the app shows exact positions to strangers nearby). Set at sign-up
+  -- (user metadata age_confirmed = true) or later through confirm_age(); nothing works before it (private.me()).
+  age_confirmed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -104,8 +107,9 @@ BEGIN
     candidate := CASE WHEN tries < 20 THEN left(base, 16) || (1000 + floor(random() * 9000))::int::text
                       ELSE 'user' || substr(md5(random()::text), 1, 12) END;
   END LOOP;
-  INSERT INTO public.profiles (id, username, full_name)
-  VALUES (p_id, candidate, left(coalesce(p_meta ->> 'full_name', ''), 60))
+  INSERT INTO public.profiles (id, username, full_name, age_confirmed_at)
+  VALUES (p_id, candidate, left(coalesce(p_meta ->> 'full_name', ''), 60),
+          CASE WHEN p_meta ->> 'age_confirmed' = 'true' THEN now() END)
   ON CONFLICT (id) DO NOTHING;
 END $$;
 
@@ -171,15 +175,30 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = '' AS $$
   SELECT EXISTS (SELECT 1 FROM private.admins WHERE user_id = p_user)
 $$;
 
--- Raises unless the caller is signed in and not disabled. Returns the caller's id.
+-- Raises unless the caller is signed in, not disabled and declared 18+. Returns the caller's id.
 CREATE FUNCTION private.me()
 RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
-DECLARE uid uuid := auth.uid();
+DECLARE
+  uid uuid := auth.uid();
+  p public.profiles;
 BEGIN
-  IF uid IS NULL OR NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = uid AND NOT disabled) THEN
+  SELECT * INTO p FROM public.profiles WHERE id = uid;
+  IF uid IS NULL OR NOT FOUND OR p.disabled THEN
     RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501';
   END IF;
+  IF p.age_confirmed_at IS NULL THEN
+    RAISE EXCEPTION 'age_not_confirmed' USING ERRCODE = '42501';
+  END IF;
   RETURN uid;
+END $$;
+
+-- "I am 18 or older" (accounts created without the sign-up checkbox, e.g. Sign in with Apple later).
+CREATE FUNCTION public.confirm_age()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := auth.uid();
+BEGIN
+  UPDATE public.profiles SET age_confirmed_at = coalesce(age_confirmed_at, now()) WHERE id = uid AND NOT disabled;
+  IF NOT FOUND THEN RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501'; END IF;
 END $$;
 
 -- ---------------------------------------------------------------------------
@@ -284,7 +303,8 @@ BEGIN
 END $$;
 
 -- The app reports where you are (foreground watch or the background plugin). Ignored while sharing is off;
--- at most one stored write per second (driving sends every 1–2 s; anything faster is dropped, not an error).
+-- about one stored write per second (driving sends every ~1 s; anything faster is dropped, not an error; the 0.9 s
+-- floor leaves room for network jitter between two 1 s sends).
 CREATE FUNCTION public.update_my_location(p_lat double precision, p_lng double precision, p_accuracy real DEFAULT NULL,
                                           p_heading real DEFAULT NULL, p_speed real DEFAULT NULL)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
@@ -304,7 +324,7 @@ BEGIN
   ON CONFLICT (user_id) DO UPDATE
     SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy_m = EXCLUDED.accuracy_m, heading = EXCLUDED.heading,
         speed = EXCLUDED.speed, updated_at = now()
-    WHERE l.updated_at < now() - interval '1 second';
+    WHERE l.updated_at < now() - interval '900 milliseconds';
   RETURN true;
 END $$;
 

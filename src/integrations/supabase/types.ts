@@ -135,6 +135,7 @@ export type Database = {
           bio: string;
           avatar_path: string | null;
           disabled: boolean;
+          age_confirmed_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -144,6 +145,7 @@ export type Database = {
           bio?: string;
           avatar_path?: string | null;
           disabled?: boolean;
+          age_confirmed_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -153,6 +155,7 @@ export type Database = {
           bio?: string;
           avatar_path?: string | null;
           disabled?: boolean;
+          age_confirmed_at?: string | null;
           created_at?: string;
         };
         Relationships: [
@@ -250,6 +253,7 @@ export type Database = {
     Functions: {
       am_i_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       block_user: { Args: { p_user: string }; Returns: undefined };
+      confirm_age: { Args: Record<PropertyKey, never>; Returns: undefined };
       follow_list: { Args: { p_user: string; p_which: string; p_limit?: number; p_offset?: number }; Returns: { id: string; username: string; full_name: string; avatar_path: string; i_follow: boolean; follows_me: boolean }[] };
       follow_user: { Args: { p_user: string }; Returns: undefined };
       map_people: { Args: { p_radius_m?: number }; Returns: { user_id: string; username: string; full_name: string; avatar_path: string; lat: number; lng: number; accuracy_m: number; heading: number; updated_at: string; distance_m: number; is_friend: boolean; can_talk: boolean }[] };

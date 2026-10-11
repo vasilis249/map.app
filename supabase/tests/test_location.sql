@@ -2,15 +2,15 @@
 \set ON_ERROR_STOP 0
 \set QUIET on
 INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"full_name":"Anna"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"full_name":"Bob"}'),
-  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"full_name":"Chris"}'),
-  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"full_name":"Dora"}'),
-  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"full_name":"Eva"}'),
-  ('00000000-0000-0000-0000-00000000000f', 'fay@x', '{"full_name":"Fay"}'),
-  ('00000000-0000-0000-0000-000000000010', 'gus@x', '{"full_name":"Gus"}'),
-  ('00000000-0000-0000-0000-000000000011', 'hal@x', '{"full_name":"Hal"}'),
-  ('00000000-0000-0000-0000-000000000012', 'ivy@x', '{"full_name":"Ivy"}');
+  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"age_confirmed":true,"full_name":"Anna"}'),
+  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"age_confirmed":true,"full_name":"Bob"}'),
+  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"age_confirmed":true,"full_name":"Chris"}'),
+  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"age_confirmed":true,"full_name":"Dora"}'),
+  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"age_confirmed":true,"full_name":"Eva"}'),
+  ('00000000-0000-0000-0000-00000000000f', 'fay@x', '{"age_confirmed":true,"full_name":"Fay"}'),
+  ('00000000-0000-0000-0000-000000000010', 'gus@x', '{"age_confirmed":true,"full_name":"Gus"}'),
+  ('00000000-0000-0000-0000-000000000011', 'hal@x', '{"age_confirmed":true,"full_name":"Hal"}'),
+  ('00000000-0000-0000-0000-000000000012', 'ivy@x', '{"age_confirmed":true,"full_name":"Ivy"}');
 -- Anna and Dora are friends (mutual follows).
 INSERT INTO public.follows (follower_id, followee_id) VALUES
   ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000d'),
@@ -174,4 +174,42 @@ UPDATE private.user_locations SET updated_at = now() - interval '30 minutes' WHE
 SELECT pg_temp.as_user(:A); SET ROLE authenticated;
 SELECT pg_temp.ok('07e your own position 30 min old: your friend yes, strangers no',
   EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :D) AND NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :E));
+RESET ROLE;
+
+-- 08 the 200 m edge (measured on the server between stored positions; 0.0009° latitude ≈ 100.1 m)
+UPDATE private.user_locations SET lat = 37.97550, lng = 23.73480, updated_at = now() WHERE user_id = :A;
+INSERT INTO public.location_sharing (user_id, mode) VALUES (:B, 'everyone') ON CONFLICT (user_id) DO UPDATE SET mode = 'everyone';
+INSERT INTO private.user_locations (user_id, lat, lng) VALUES (:B, 37.97550 + 195 / 111195.0, 23.73480)
+  ON CONFLICT (user_id) DO UPDATE SET lat = excluded.lat, lng = excluded.lng, updated_at = now();
+UPDATE private.user_locations SET lat = 37.97550 + 205 / 111195.0, lng = 23.73480, updated_at = now() WHERE user_id = :E;
+SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('08a 195 m: on the map and talkable; 205 m: not on the map',
+  (SELECT distance_m BETWEEN 194 AND 196 AND can_talk FROM public.map_people() WHERE user_id = :B)
+  AND NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :E));
+RESET ROLE;
+SELECT pg_temp.ok('08b are_nearby agrees (195 m yes, 205 m no)', private.are_nearby(:A, :B) AND NOT private.are_nearby(:A, :E));
+
+-- 09 ghost mode: one tap off = position gone, invisible, and you see nobody; back on = visible after the next fix
+SELECT pg_temp.as_user(:B); SET ROLE authenticated;
+SELECT public.set_location_sharing('off');
+RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('09a Bob in ghost mode: gone from Anna''s map at once', NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :B));
+RESET ROLE; SELECT pg_temp.as_user(:B); SET ROLE authenticated;
+SELECT pg_temp.ok('09b … his stored position is deleted and he sees nobody',
+  (SELECT NOT has_position AND mode = 'off' FROM public.my_location_sharing()) AND NOT EXISTS (SELECT 1 FROM public.map_people()));
+SELECT public.set_location_sharing('everyone');
+SELECT pg_temp.ok('09c back on: still invisible until a new position arrives (no old one comes back)',
+  (SELECT NOT has_position FROM public.my_location_sharing()));
+SELECT public.update_my_location(37.97640, 23.73480, 8);
+RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('09d … and visible again with it', EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :B));
+RESET ROLE;
+
+-- 10 blocks hide both ways on the map even for friends sharing at any distance
+SELECT pg_temp.as_user(:D); SET ROLE authenticated;
+SELECT public.block_user(:A);
+SELECT pg_temp.ok('10a a friend who blocks you: gone from your map and you from theirs, follows ended',
+  NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :A));
+RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('10b … from your side too', NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :D));
 RESET ROLE;

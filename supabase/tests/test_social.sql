@@ -2,11 +2,11 @@
 \set ON_ERROR_STOP 0
 \set QUIET on
 INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"full_name":"Άννα Παπαδοπούλου"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"full_name":"Bob", "username":"bob"}'),
-  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"full_name":"Chris"}'),
-  ('00000000-0000-0000-0000-00000000000d', 'xy@x', '{}'),
-  ('00000000-0000-0000-0000-00000000000e', 'bob2@x', '{"username":"bob"}');
+  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"age_confirmed":true,"full_name":"Άννα Παπαδοπούλου"}'),
+  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"age_confirmed":true,"full_name":"Bob", "username":"bob"}'),
+  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"age_confirmed":true,"full_name":"Chris"}'),
+  ('00000000-0000-0000-0000-00000000000d', 'xy@x', '{"age_confirmed":true}'),
+  ('00000000-0000-0000-0000-00000000000e', 'bob2@x', '{"age_confirmed":true,"username":"bob"}');
 
 CREATE FUNCTION pg_temp.as_user(u text) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN PERFORM set_config('request.jwt.claim.sub', u, false);
@@ -142,6 +142,25 @@ SELECT pg_temp.ok('05b a disabled account can do nothing', pg_temp.err(format('S
 RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
 SELECT pg_temp.ok('05c … and is hidden from others', NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = :D)
   AND NOT EXISTS (SELECT 1 FROM public.search_users('userxy')));
+RESET ROLE;
+
+-- 05d age gate: an account without the 18+ declaration can do nothing until it confirms
+INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
+  ('00000000-0000-0000-0000-0000000000f1', 'young@x', '{"full_name":"No Age", "age_confirmed":"yes"}');
+SELECT pg_temp.as_user('00000000-0000-0000-0000-0000000000f1'); SET ROLE authenticated;
+SELECT pg_temp.ok('05d no declaration (only a JSON true counts): every RPC says age_not_confirmed',
+  pg_temp.err(format('SELECT public.follow_user(%L)', :A)) = 'age_not_confirmed'
+  AND pg_temp.err('SELECT * FROM public.map_people()') = 'age_not_confirmed'
+  AND pg_temp.err($$SELECT public.set_location_sharing('everyone')$$) = 'age_not_confirmed'
+  AND pg_temp.err($$SELECT public.update_my_location(37.9, 23.7)$$) = 'age_not_confirmed');
+SELECT pg_temp.ok('05e the flag can''t be set by hand',
+  pg_temp.fails($$UPDATE public.profiles SET age_confirmed_at = now() WHERE id = '00000000-0000-0000-0000-0000000000f1'$$));
+SELECT public.confirm_age();
+SELECT pg_temp.ok('05f confirm_age() → RPCs work', pg_temp.err(format('SELECT public.follow_user(%L)', :A)) = 'ok');
+RESET ROLE;
+SELECT pg_temp.ok('05g the declaration time is kept', (SELECT age_confirmed_at IS NOT NULL FROM public.profiles WHERE id = '00000000-0000-0000-0000-0000000000f1'));
+SET ROLE anon;
+SELECT pg_temp.ok('05h anon can''t confirm', pg_temp.fails('SELECT public.confirm_age()'));
 RESET ROLE;
 
 -- 06 privileges

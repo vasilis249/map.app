@@ -2,9 +2,9 @@
 \set ON_ERROR_STOP 0
 \set QUIET on
 INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
-  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"full_name":"Anna"}'),
-  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"full_name":"Bob"}'),
-  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"full_name":"Chris"}');
+  ('00000000-0000-0000-0000-00000000000a', 'anna@x', '{"age_confirmed":true,"full_name":"Anna"}'),
+  ('00000000-0000-0000-0000-00000000000b', 'bob@x', '{"age_confirmed":true,"full_name":"Bob"}'),
+  ('00000000-0000-0000-0000-00000000000c', 'chris@x', '{"age_confirmed":true,"full_name":"Chris"}');
 -- Anna and Bob are friends (mutual follows); Chris only follows Anna.
 INSERT INTO public.follows (follower_id, followee_id) VALUES
   ('00000000-0000-0000-0000-00000000000a', '00000000-0000-0000-0000-00000000000b'),
@@ -99,8 +99,8 @@ RESET ROLE;
 
 -- 04 walkie list, open channels, unheard, notifications (Dora and Eva are friends; Chris follows Dora only)
 INSERT INTO auth.users (id, email, raw_user_meta_data) VALUES
-  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"full_name":"Dora"}'),
-  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"full_name":"Eva"}');
+  ('00000000-0000-0000-0000-00000000000d', 'dora@x', '{"age_confirmed":true,"full_name":"Dora"}'),
+  ('00000000-0000-0000-0000-00000000000e', 'eva@x', '{"age_confirmed":true,"full_name":"Eva"}');
 INSERT INTO public.follows (follower_id, followee_id) VALUES
   ('00000000-0000-0000-0000-00000000000d', '00000000-0000-0000-0000-00000000000e'),
   ('00000000-0000-0000-0000-00000000000e', '00000000-0000-0000-0000-00000000000d'),
