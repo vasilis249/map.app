@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Users } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
+import { GhostButton } from "@/components/location/ghost-button";
 import { LiveMap, type MapFocus } from "@/components/map/live-map";
 import { NearbyTalk } from "@/components/map/nearby-talk";
 import { FollowButton } from "@/components/friends/follow-button";
@@ -208,19 +209,23 @@ function MapPage() {
 
       {/* bottom (above the floating nav) */}
       <div className="absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-10 flex flex-col gap-3 px-4">
-        {me && (
-          <button
-            type="button"
-            onClick={() => {
-              move(view === "nearby" ? "radius" : "me");
-              void enableCompass(); // inside the tap: iOS asks for motion access once
-            }}
-            aria-label={t("map.recenter")}
-            className="grid h-12 w-12 place-items-center self-end rounded-full glass border border-border/60 shadow-float"
-          >
-            <LocateFixed className="h-5 w-5 text-link" />
-          </button>
-        )}
+        {/* ghost mode (one tap) · back to me */}
+        <div className="flex items-end justify-between gap-3">
+          {s ? <GhostButton sharing={s} /> : <span />}
+          {me && (
+            <button
+              type="button"
+              onClick={() => {
+                move(view === "nearby" ? "radius" : "me");
+                void enableCompass(); // inside the tap: iOS asks for motion access once
+              }}
+              aria-label={t("map.recenter")}
+              className="grid h-12 w-12 place-items-center rounded-full glass border border-border/60 shadow-float"
+            >
+              <LocateFixed className="h-5 w-5 text-link" />
+            </button>
+          )}
+        </div>
 
         {on && view === "friends" && (
           <div className="max-w-full self-start rounded-3xl glass border border-border/60 shadow-float p-3">

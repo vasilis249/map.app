@@ -116,6 +116,7 @@ const en: Messages = {
     oldApp: "Update the app for better background location.",
     retry: "Retry",
     ghost: "Ghost",
+    ghostOff: "Visible again",
     ghostOn: "You're invisible — nobody sees your location.",
   },
   location: {

@@ -11,3 +11,11 @@ psql -q -d mapapp -f "$S/rt_mock.sql"
 psql -q -d mapapp -f "$S/local_auth.sql"
 psql -q -d mapapp -f "$S/seed.sql"
 psql -q -d mapapp -c "NOTIFY pgrst, 'reload schema'"
+# PostgREST (if running) reconnects to the recreated database and reloads its schema: wait until it answers.
+if curl -s -o /dev/null http://127.0.0.1:3001/ 2>/dev/null; then
+  for i in $(seq 1 40); do
+    code=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3001/rpc/local_login -H 'content-type: application/json' -d '{"p_email":"x","p_password":"y"}')
+    [ "$code" = "200" ] && break
+    sleep 0.25
+  done
+fi

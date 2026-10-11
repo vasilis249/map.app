@@ -1,3 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "./design-system.css";
+
+/* Map attribution (required by OpenFreeMap / OpenStreetMap) stays visible above the floating tab bar. */
+.maplibregl-map .maplibregl-ctrl-bottom-right,
+.maplibregl-map .maplibregl-ctrl-bottom-left {
+  bottom: calc(env(safe-area-inset-bottom) + 5.5rem);
+}

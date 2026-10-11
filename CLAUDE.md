@@ -77,17 +77,26 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   `@lovable.dev/vite-tanstack-config` wrapper (fewer hidden plugins; same result).
 - D2 (P0) Client-rendered app (`defaultSsr: false`); security headers from `src/server.ts`.
 - D3 (P0) Radius 200 m everywhere (kit: 500 m); map radius chips 50 / 100 / 200 m.
-- D4 (P0) Position write floor 1 s (kit: 3 s) for driving. The tracker's own 3 s gate in `tracker.ts` is unchanged
-  until the owner approves the adaptive-rate change (P1).
+- D4 (P0/P1) Position write floor 0.9 s on the server (kit: 3 s). Tracker (owner-approved change): minimum gap 1 s
+  above 5 m/s (18 km/h), else the kit's 3 s; all other kit send rules unchanged.
 - D5 (P0) Notifications: follow / nearby (= someone talked to you on the map; covers "knocks") / walkie (missed).
 - D6 (P0) No catch-all Realtime policy (Speak had one); only walkie / nearby / inbox topics are allowed.
 - D7 (P0) `img-src` no longer allows any https host (Speak's news covers); avatars come from Supabase only.
-- PENDING (asked before P1): app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in
-  `src/lib/brand.ts`, `capacitor.config.ts`, `ios/App/App/Info.plist`), iOS only vs + Android, Apple Developer
-  Program timing, routing/geocoding provider, friends visible beyond 200 m, age limit, travel profiles.
+- D8 (owner OK before P1, my recommendations): iOS only for now; Apple Developer Program now; routing + geocoding =
+  Stadia Maps (hosted Valhalla + Pelias autocomplete; Starter plan for commercial use) behind one swappable module
+  (P4); friends see each other at any distance ("friends" mode); 18+ only; driving profile first.
+- D9 (P1) 18+ = a declaration: sign-up checkbox (user metadata `age_confirmed: true` → profiles.age_confirmed_at) or
+  `confirm_age()` for accounts created without it; `private.me()` raises `age_not_confirmed` until then and the app
+  shows the age gate (`src/components/age-gate.tsx`). App Store age rating to match (P6).
+- D10 (P1) Ghost mode = sharing `off` with one tap on the map (server deletes the position at once); the previous
+  mode is remembered on the device so one more tap restores it (`src/components/location/ghost-button.tsx`).
+- D11 Until the first deploy to a real Supabase project the baseline migration is amended in place; after it, only
+  new migrations.
+- PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
+  `capacitor.config.ts`, `ios/App/App/Info.plist`).
 
 ## Phase log
-### P0 — setup + port (done, awaiting OK)
+### P0 — setup + port (done, OK'd)
 - Baseline migration + 4 SQL suites: location 28, nearby 28, walkie 28 (ported), social 35 (new) — all PASS.
 - Web app builds, typechecks, lints; kit files ported (map, tracker, compass, nearby talk, walkie engine/hub/codec,
   audio, recorder + push-to-talk hooks, banner, person card, report/block, location settings, walkie screens).
@@ -97,3 +106,17 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Kit e2e flows are in `docs/kit/e2e-flows/` until P3 rewrites them.
 - Not verified in P0: anything on a real iPhone / Xcode build, real Supabase project, map tiles in the container
   (OpenFreeMap not reachable from the test browser), live map / walkie / nearby in the browser (P1 / P3).
+
+### P1 — live map + 200 m (done, awaiting OK)
+- 18+ gate (SQL + sign-up checkbox + age gate screen), ghost mode, Follow on the person card, adaptive tracker gate,
+  map attribution kept above the tab bar.
+- SQL: location 36 (new: 195/205 m edge, ghost mode, blocks on friends), social 40 (new: age gate) — all PASS.
+- Browser `map` flow (27 checks, two phones with Playwright geolocation): opt-in with the strangers warning, tracker
+  sends, friends layer (3 km), stranger at 100 m appears / at 300 m disappears / comes back, card (name, @username,
+  distance, push-to-talk button, Profile, ⋯, Follow), ghost both ways, reciprocity, block hides both ways.
+  `auth` flow 23 checks (incl. 18+ checkbox and age gate). Map tiles now load in tests (Chromium uses the container
+  proxy via `--proxy-server`; Playwright's own `proxy` option would also proxy loopback).
+- Harness fixes: stack/serve fully detached (a caller's pipe never hangs), PostgREST waited for after a DB reset,
+  `run.sh` reports crashed flows.
+- Not verified: real iPhone (background location, Always permission, Precise off → temporary full accuracy), the
+  1 s driving rate on a real drive, real Supabase project. People refresh by polling every 5 s (not push).

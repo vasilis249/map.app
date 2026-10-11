@@ -52,10 +52,13 @@ await page.getByLabel("Email").fill("kat@test.gr");
 await page.getByLabel("Κωδικός").fill("short");
 ok("signup: a 5-character password keeps the button off", await page.getByRole("button", { name: "Δημιουργία λογαριασμού" }).isDisabled());
 await page.getByLabel("Κωδικός").fill("kat-secret-9");
+ok("signup: without the 18+ declaration the button stays off", await page.getByRole("button", { name: "Δημιουργία λογαριασμού" }).isDisabled());
+await page.getByRole("checkbox", { name: /Είμαι 18 ετών/ }).check();
 await page.getByRole("button", { name: "Δημιουργία λογαριασμού" }).click();
 await page.waitForURL(/\/map/, { timeout: 15_000 });
 ok("signed up → on the map", /\/map/.test(page.url()));
-ok("profile created with the chosen username and name", sql("select username || '|' || full_name from public.profiles p join auth.users u on u.id = p.id where u.email = 'kat@test.gr'") === "katdimou|Κατερίνα Δήμου");
+ok("profile created with the chosen username and name, 18+ declaration stored",
+  sql("select username || '|' || full_name || '|' || (age_confirmed_at is not null) from public.profiles p join auth.users u on u.id = p.id where u.email = 'kat@test.gr'") === "katdimou|Κατερίνα Δήμου|true");
 ok("location sharing is OFF by default (map says so)", await seen(page.getByText("Η θέση σου δεν φαίνεται"))
   && sql("select count(*) from public.location_sharing ls join auth.users u on u.id = ls.user_id where u.email = 'kat@test.gr'") === "0");
 await page.screenshot({ path: `${S}/auth-1-map.png` });
@@ -115,6 +118,21 @@ for (const [path, text] of [["/talk", "Κανένας φίλος ακόμα"], [
   ok(`${path} opens ("${text}")`, await seen(page.getByText(text)));
 }
 await page.screenshot({ path: `${S}/auth-4-walkie-outsider.png` });
+
+// 9. An account without the 18+ declaration (e.g. a future Sign in with Apple): the age gate, then the app
+sql(`insert into auth.users (email, raw_user_meta_data, local_password) values ('noage@test', '{"full_name":"Χωρίς Ηλικία"}', encode(sha256('noage-pass-1'), 'hex'))`);
+await page.goto(base + "/profile", { waitUntil: "load" });
+await page.getByRole("button", { name: "Αποσύνδεση" }).click();
+await page.waitForURL(/\/login$/);
+await page.getByLabel("Email").fill("noage@test");
+await page.getByLabel("Κωδικός").fill("noage-pass-1");
+await page.getByRole("button", { name: "Σύνδεση" }).last().click();
+ok("no declaration: the age gate instead of the app", await seen(page.getByText("Μόνο για ενήλικες"))
+  && !(await page.getByRole("link", { name: "Χάρτης" }).isVisible()));
+await page.screenshot({ path: `${S}/auth-5-age-gate.png` });
+await page.getByRole("button", { name: "Είμαι 18+" }).click();
+ok("confirmed → the app opens, declaration stored", await seen(page.getByRole("link", { name: "Χάρτης" }))
+  && sql("select (age_confirmed_at is not null)::text from public.profiles p join auth.users u on u.id = p.id where u.email = 'noage@test'") === "true");
 
 console.log("errors:", errors.length ? [...new Set(errors)].join(" | ") : "none");
 ok("no page errors", errors.length === 0);
