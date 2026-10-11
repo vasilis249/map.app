@@ -78,7 +78,7 @@ function AdminPage() {
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
                 {r.has_audio && (
-                  <button type="button" onClick={() => void listen(r)} className="flex h-10 items-center gap-1.5 rounded-full bg-secondary px-4 text-caption font-semibold">
+                  <button type="button" onClick={() => void listen(r)} className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-background px-4 text-caption font-semibold">
                     <Play className="h-4 w-4" /> {t("admin.listen")}
                   </button>
                 )}
@@ -88,7 +88,7 @@ function AdminPage() {
                       type="button"
                       disabled={resolve.isPending}
                       onClick={() => resolve.mutate({ r, action: "dismiss" })}
-                      className="h-10 rounded-full bg-secondary px-4 text-caption font-semibold disabled:opacity-60"
+                      className="h-10 rounded-full border border-border bg-background px-4 text-caption font-semibold disabled:opacity-60"
                     >
                       {t("admin.dismiss")}
                     </button>
@@ -107,7 +107,7 @@ function AdminPage() {
                     type="button"
                     disabled={enable.isPending}
                     onClick={() => enable.mutate(r.target_user_id)}
-                    className="h-10 rounded-full bg-secondary px-4 text-caption font-semibold disabled:opacity-60"
+                    className="h-10 rounded-full border border-border bg-background px-4 text-caption font-semibold disabled:opacity-60"
                   >
                     {t("admin.enable")}
                   </button>

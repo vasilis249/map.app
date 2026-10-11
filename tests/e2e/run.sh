@@ -9,7 +9,7 @@ P=${1:-8899}
 bash "$S/local-build.sh" "$P" 2>&1 | tail -1
 fail=0
 # The kit's walkie / nearby / micsession / ptt flows are rewritten for this app in Phase 3.
-for f in ${FLOWS:-auth map}; do
+for f in ${FLOWS:-auth map social}; do
   bash "$S/reset-local.sh" >/dev/null 2>&1
   rm -rf "$S/storage-files"
   out=$(cd "$S" && timeout 400 node "$f-flow.mjs" "$P" 2>&1)

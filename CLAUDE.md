@@ -92,6 +92,11 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   mode is remembered on the device so one more tap restores it (`src/components/location/ghost-button.tsx`).
 - D11 Until the first deploy to a real Supabase project the baseline migration is amended in place; after it, only
   new migrations.
+- D12 (P2) Moderation: admins (`private.admins`, granted by SQL) work a queue (`admin_reports`), can hear a reported
+  transmission while it is kept (24 h), dismiss, or disable an account (closes all its open reports; position and
+  open channels to them deleted). Every decision records resolved_by / resolved_at / resolution. A disabled account
+  sees a suspension screen; others can't find it anywhere. Re-enable from the resolved tab.
+- D13 (P2) Lists page with offset (50 per page, "More"); notices carry "Follow back"; suggestions on empty search.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
   `capacitor.config.ts`, `ios/App/App/Info.plist`).
 
@@ -107,7 +112,7 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Not verified in P0: anything on a real iPhone / Xcode build, real Supabase project, map tiles in the container
   (OpenFreeMap not reachable from the test browser), live map / walkie / nearby in the browser (P1 / P3).
 
-### P1 — live map + 200 m (done, awaiting OK)
+### P1 — live map + 200 m (done, OK'd)
 - 18+ gate (SQL + sign-up checkbox + age gate screen), ghost mode, Follow on the person card, adaptive tracker gate,
   map attribution kept above the tab bar.
 - SQL: location 36 (new: 195/205 m edge, ghost mode, blocks on friends), social 40 (new: age gate) — all PASS.
@@ -120,3 +125,16 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   `run.sh` reports crashed flows.
 - Not verified: real iPhone (background location, Always permission, Precise off → temporary full accuracy), the
   1 s driving rate on a real drive, real Supabase project. People refresh by polling every 5 s (not push).
+
+### P2 — social (done, awaiting OK)
+- Followers / following lists (paged; remove a follower on your own), clickable counts on profiles, suggestions,
+  follow back from notices, blocked list + unblock, report/block (⋯) on the walkie screen too, admin moderation
+  screen (`/admin`), suspended-account screen.
+- SQL: new suite moderation (16): queue admin-only, hear reported audio, dismiss / disable / re-enable, what a
+  disabled account loses, paged lists. Totals: 148 PASS.
+- Browser `social` flow (25 checks) + `auth` 23 + `map` 27 — all PASS, no page errors.
+- Harness: `stack.sh` starts each server with one simple backgrounded command (a `cd … && cmd &` list kept the
+  caller's pipe open and hung `run.sh`).
+- Not verified: real Supabase project / real Realtime; moderation emails / notifications to admins (none yet: admins
+  look at the queue). Notifications refresh by polling (60 s badge), not live.
+

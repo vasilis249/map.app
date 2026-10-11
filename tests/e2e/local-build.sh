@@ -4,7 +4,7 @@ S="$(cd "$(dirname "$0")" && pwd)"
 cd "$S/../.."
 su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/mapapp-test -o '-p 54329 -k /tmp' -l /tmp/pg-mapapp.log status" >/dev/null 2>&1 \
   || su postgres -c "/usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/mapapp-test -o '-p 54329 -k /tmp' -l /tmp/pg-mapapp.log -w start" >/dev/null
-curl -s -o /dev/null http://127.0.0.1:54321/auth/v1/health || bash $S/stack.sh >/dev/null
+curl -s -o /dev/null http://127.0.0.1:54321/auth/v1/health || bash $S/stack.sh >/dev/null 2>&1
 ENV=$(node $S/local-env.mjs)
 # Server-side vars for the preview Worker (git-ignored); the client gets the VITE_* ones at build time.
 grep -v '^VITE_' <<<"$ENV" > .dev.vars
