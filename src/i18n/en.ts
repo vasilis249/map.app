@@ -47,6 +47,11 @@ const en: Messages = {
     emailTaken: "There is already an account with this email.",
     invalidEmail: "Invalid email.",
     tagline: "Your map, the people around you, one voice.",
+    age18: "I am 18 or older",
+    age18Why: "The app shows your exact position to people near you, so it's for adults only.",
+    ageGateTitle: "Adults only",
+    ageGateText: "To continue, confirm that you are 18 or older. The app shows your exact position to people near you, if you choose so.",
+    ageGateConfirm: "I'm 18+",
   },
   profile: {
     title: "Profile",

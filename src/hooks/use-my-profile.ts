@@ -9,6 +9,8 @@ export interface MyProfile {
   full_name: string;
   bio: string;
   avatar_path: string | null;
+  /** null until the person declared 18+ (the server refuses everything before that). */
+  age_confirmed_at: string | null;
 }
 
 export function useMyProfile() {
@@ -17,7 +19,7 @@ export function useMyProfile() {
     queryKey: friendKeys.me,
     enabled: !!user,
     queryFn: async (): Promise<MyProfile> => {
-      const { data, error } = await supabase.from("profiles").select("id, username, full_name, bio, avatar_path").eq("id", user!.id).single();
+      const { data, error } = await supabase.from("profiles").select("id, username, full_name, bio, avatar_path, age_confirmed_at").eq("id", user!.id).single();
       if (error) throw error;
       return data;
     },

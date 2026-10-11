@@ -23,9 +23,10 @@ function SignupPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [adult, setAdult] = useState(false);
 
   const userOk = !username || USERNAME.test(username);
-  const valid = fullName.trim().length > 0 && fullName.trim().length <= 60 && userOk && /.+@.+\..+/.test(email.trim()) && password.length >= 8;
+  const valid = fullName.trim().length > 0 && fullName.trim().length <= 60 && userOk && /.+@.+\..+/.test(email.trim()) && password.length >= 8 && adult;
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -35,7 +36,7 @@ function SignupPage() {
       email: email.trim(),
       password,
       options: {
-        data: { full_name: fullName.trim(), ...(username ? { username } : {}) },
+        data: { full_name: fullName.trim(), age_confirmed: true, ...(username ? { username } : {}) },
         emailRedirectTo: authRedirectUrl("/login"),
       },
     });
@@ -86,6 +87,13 @@ function SignupPage() {
             onChange={(e) => setPassword(e.target.value)}
             hint={t("auth.passwordHint")}
           />
+          <label className="flex items-start gap-3 rounded-2xl bg-card p-3 text-callout">
+            <input type="checkbox" checked={adult} onChange={(e) => setAdult(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-current" />
+            <span>
+              <span className="block font-semibold">{t("auth.age18")}</span>
+              <span className="block text-caption text-muted-foreground">{t("auth.age18Why")}</span>
+            </span>
+          </label>
           <button type="submit" disabled={busy || !valid} className="h-12 w-full rounded-full bg-primary font-semibold text-primary-foreground disabled:opacity-50">
             {t("auth.signUp")}
           </button>

@@ -9,7 +9,8 @@ import { sendPosition } from "./api";
  * watchPosition with high accuracy, only while the page is open.
  * Sent when you really moved (more than the fix's own error, at least 8 m), when a fix is clearly more precise than
  * the last one sent, every 30 s while you drift a little, and once a minute as a heartbeat while you stand still
- * (iOS sends nothing then), so friends see "now" instead of an old time. Never more than one every 3 s. A much
+ * (iOS sends nothing then), so friends see "now" instead of an old time. Never more than one every 3 s — every 1 s
+ * while driving (speed > 18 km/h). A much
  * worse fix right after a good one (a jump to a Wi-Fi/cell estimate) is ignored.
  *
  * Separately, the map shows where you are right now straight from the device (`watchLocal`), whether you share or
@@ -106,10 +107,16 @@ export function metres(a: { lat: number; lng: number }, b: { lat: number; lng: n
   return 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(x)));
 }
 
+/** Faster than this (m/s, 18 km/h) = driving or riding: send about every second (15–25 m apart at road speeds). */
+const FAST_MPS = 5;
+
 function shouldSend(p: Fix, now: number): boolean {
   if (!last) return true;
   const age = now - last.at;
-  if (age < 3_000) return false; // the server keeps one every 3 s anyway
+  // The server stores about one a second. Driving needs that (people 200 m away pass in seconds); walking or
+  // standing, one every 3 s is plenty and saves battery.
+  const fast = p.speed != null && p.speed > FAST_MPS;
+  if (age < (fast ? 1_000 : 3_000)) return false;
   if (isJump(last, p.accuracy, now)) return false;
   const acc = p.accuracy ?? 30;
   if (last.acc != null && acc < last.acc * 0.6) return true; // clearly more precise than what friends see

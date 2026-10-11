@@ -10,8 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useMyProfile } from "@/hooks/use-my-profile";
 import { uploadAvatar } from "@/lib/avatar";
 import { friendKeys, profileStats, rpcErrorKey } from "@/lib/friends";
-import { stopTracking } from "@/lib/location/tracker";
-import { walkieHub } from "@/lib/walkie/hub";
+import { signOut } from "@/lib/sign-out";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: MyProfilePage,
@@ -58,11 +57,8 @@ function MyProfilePage() {
     },
   });
 
-  async function signOut() {
-    walkieHub.setUser(null);
-    await stopTracking();
-    await supabase.auth.signOut();
-    qc.clear();
+  async function leave() {
+    await signOut(qc);
     void navigate({ to: "/login", replace: true });
   }
 
@@ -151,7 +147,7 @@ function MyProfilePage() {
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </Link>
 
-          <button type="button" onClick={() => void signOut()} className="h-12 w-full rounded-full bg-secondary font-semibold text-destructive">
+          <button type="button" onClick={() => void leave()} className="h-12 w-full rounded-full bg-secondary font-semibold text-destructive">
             {t("auth.signOut")}
           </button>
         </div>

@@ -6,6 +6,7 @@ import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Users } fr
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { LiveMap, type MapFocus } from "@/components/map/live-map";
 import { NearbyTalk } from "@/components/map/nearby-talk";
+import { FollowButton } from "@/components/friends/follow-button";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { useHubPeers } from "@/components/walkie/walkie-hub";
 import { UserAvatar } from "@/components/user-avatar";
@@ -394,13 +395,16 @@ function MapPage() {
               ) : (
                 on && <NearbyTalk person={current} />
               )}
-              <Link
-                to="/u/$username"
-                params={{ username: current.username }}
-                className={cn("flex h-12 items-center justify-center rounded-full bg-secondary font-semibold", current.is_friend ? "mt-2" : "mt-4")}
-              >
-                {t("map.profile")}
-              </Link>
+              <div className={cn("grid grid-cols-2 gap-2", current.is_friend ? "mt-2" : "mt-4")}>
+                <FollowButton userId={current.user_id} />
+                <Link
+                  to="/u/$username"
+                  params={{ username: current.username }}
+                  className="flex h-12 items-center justify-center rounded-full bg-secondary font-semibold"
+                >
+                  {t("map.profile")}
+                </Link>
+              </div>
             </div>
           )}
         </DrawerContent>
