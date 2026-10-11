@@ -1,0 +1,429 @@
+/* ============================================================
+ * Design system — the single source of the app's look.
+ * "Quiet" system in /DESIGN.md (user decision 2026-10-01): ink on white (or black), a grey scale, ONE indigo accent
+ * for labels / links / follow, black play buttons and primary actions, hairlines instead of boxes, iOS large titles,
+ * motion that explains (springs, staggered lists, filling waveforms, haptics). Light + dark follow the iPhone. Screens use tokens only (bg-background, bg-card, bg-secondary, text-foreground,
+ * text-muted-foreground, bg-primary, text-link, bg-live, text-success, rounded-*, text-body …) — never raw hex.
+ * ============================================================ */
+
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+@theme inline {
+  /* Quiet radii: 10 buttons / chips · 14 voice tiles / inputs · 20 cards / sheets · full avatars. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-3xl: 20px;
+
+  /* The system font (SF Pro on iPhone, Greek included), like the big social apps; no download. */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+  /* Quiet type scale: iOS large titles, tight display tracking, 15–16px reading text. */
+  --text-hero: 30px;
+  --text-hero--line-height: 1.1;
+  --text-hero--letter-spacing: -0.03em;
+  --text-hero--font-weight: 700;
+  --text-display: 24px;
+  --text-display--line-height: 1.25;
+  --text-display--letter-spacing: -0.025em;
+  --text-display--font-weight: 650;
+  --text-tagline: 20px;
+  --text-tagline--line-height: 1.27;
+  --text-tagline--letter-spacing: -0.02em;
+  --text-tagline--font-weight: 650;
+  --text-body: 16px;
+  --text-body--line-height: 1.4;
+  --text-body--letter-spacing: 0;
+  --text-callout: 15px;
+  --text-callout--line-height: 1.35;
+  --text-callout--letter-spacing: 0;
+  --text-caption: 13px;
+  --text-caption--line-height: 1.35;
+  --text-caption--letter-spacing: 0;
+  --text-fine: 12px;
+  --text-fine--line-height: 1.3;
+  --text-fine--letter-spacing: 0;
+
+--color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  /* iOS sheets: grouped background with rows in white (light) / tile-2 (dark) groups. */
+  --color-sheet: var(--sheet);
+  --color-group: var(--group);
+  /* Selected segment of an iOS segmented control (white on the grey track; lighter grey in dark). */
+  --color-segment: var(--segment);
+
+  /* Blue text (links, section names), live red (recording / talking / unread), friend green. */
+  --color-link: var(--link);
+  --color-live: var(--live);
+  --color-success: var(--success);
+  --color-nav: var(--nav);
+  --color-nav-active: var(--nav-active);
+  /* Unplayed waveform bars. */
+  --color-wave: var(--wave);
+  /* Old names kept as aliases: coral = live, badge = live. */
+  --color-coral: var(--live);
+  --color-badge: var(--live);
+
+  /* Flat system: no shadows on cards, buttons or text. One soft shadow for things floating over content. */
+  --shadow-glow: none;
+  --shadow-xs: none;
+  --shadow-sm: none;
+  --shadow: none;
+  --shadow-md: none;
+  --shadow-lg: var(--float-shadow);
+  --shadow-xl: var(--float-shadow);
+  --shadow-float: var(--float-shadow);
+}
+
+/* Light: white canvas, ink, one indigo. */
+:root {
+  --radius: 10px;
+  color-scheme: light dark;
+
+  --background: #ffffff;
+  --foreground: #0b0b0c;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --sheet: #ffffff;
+  --group: #f4f4f5;
+  --segment: #ffffff;
+  --card: #f4f4f5;
+  --card-foreground: #0b0b0c;
+  --popover: #ffffff;
+  --popover-foreground: #0b0b0c;
+  /* primary = ink: play buttons, Publish, the one main action. Indigo lives in link (labels, follow, unread). */
+  --primary: #0b0b0c;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f5;
+  --secondary-foreground: #0b0b0c;
+  --muted: #f4f4f5;
+  --muted-foreground: #6b6b75;
+  --accent: #f4f4f5;
+  --accent-foreground: #0b0b0c;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: #eaeaec;
+  --input: #e4e4e7;
+  --ring: #3346d3;
+  --link: #3346d3;
+  --live: #e5484d;
+  --success: #2f9e57;
+  --wave: #cdcdd3;
+  --nav: rgb(255 255 255 / 0.88);
+  --nav-active: rgb(11 11 12 / 0.06);
+  --glass: rgb(255 255 255 / 0.88);
+  --float-shadow: 0 10px 30px rgb(0 0 0 / 0.1);
+}
+
+/* Dark: near-black canvas, soft white ink, lighter indigo. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0b;
+    --foreground: #ededef;
+    --surface: #17171a;
+    --surface-elevated: #1d1d21;
+    --sheet: #1d1d21;
+    --group: #26262b;
+    --segment: #3a3a41;
+    --card: #17171a;
+    --card-foreground: #ededef;
+    --popover: #1d1d21;
+    --popover-foreground: #ededef;
+    --primary: #ededef;
+    --primary-foreground: #0a0a0b;
+    --secondary: #17171a;
+    --secondary-foreground: #ededef;
+    --muted: #17171a;
+    --muted-foreground: #9b9ba5;
+    --accent: #17171a;
+    --accent-foreground: #ededef;
+    --destructive: #ff6b70;
+    --destructive-foreground: #0a0a0b;
+    --border: #242428;
+    --input: #2a2a2f;
+    --ring: #8f9bff;
+    --link: #8f9bff;
+    --live: #ff6b70;
+    --success: #4cc27a;
+    --wave: #3a3a41;
+    --nav: rgb(10 10 11 / 0.86);
+    --nav-active: rgb(255 255 255 / 0.08);
+    --glass: rgb(10 10 11 / 0.84);
+    --float-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+  body {
+    letter-spacing: -0.006em;
+  }
+  /* Headlines: system font, tight tracking. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    font-weight: 650;
+    letter-spacing: -0.02em;
+  }
+
+  a,
+  button {
+    transition:
+      color 250ms ease,
+      background-color 250ms ease,
+      border-color 250ms ease,
+      transform 220ms cubic-bezier(0.3, 0.7, 0.4, 1),
+      opacity 250ms ease;
+  }
+  input,
+  textarea,
+  select {
+    transition:
+      border-color 180ms ease,
+      box-shadow 200ms ease,
+      background-color 180ms ease;
+  }
+  /* The system-wide press state: a short squeeze that springs back. */
+  button:not(:disabled):active,
+  a:active {
+    transform: scale(0.96);
+    transition-duration: 90ms;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 8px;
+  }
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent);
+    border-color: var(--ring);
+  }
+}
+
+/* Frosted glass for things floating over content (nav, header, mini player, map controls). */
+@utility glass {
+  background-color: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* iOS app (Capacitor): safe areas for notch / home indicator (viewport-fit=cover). */
+@utility safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* Inside the app only: no zoom into small inputs, no tap flash. */
+.native-app input,
+.native-app select,
+.native-app textarea {
+  font-size: max(16px, 1em);
+}
+.native-app {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Buttons never start an iOS text selection on a long press (it would steal the press). */
+.native-app button {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Motion */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 45%, transparent); }
+  50% { box-shadow: 0 0 0 10px color-mix(in oklab, var(--live) 0%, transparent); }
+}
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+/* Voice mark while recording: each bar breathes (see VoiceIcon live). */
+@keyframes voice-bar {
+  0%, 100% { transform: scaleY(0.45); }
+  50% { transform: scaleY(1); }
+}
+.voice-live line { transform-box: fill-box; transform-origin: center; animation: voice-bar 800ms ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .voice-live line { animation: none; } }
+
+.animate-fade-in-up { animation: fade-in-up 600ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-scale-in { animation: scale-in 400ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-pulse-glow { animation: pulse-glow 2.8s ease-in-out infinite; }
+/* "Not now" (e.g. walkie button while the friend talks). */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-8px); }
+  40%, 80% { transform: translateX(8px); }
+}
+.animate-shake { animation: shake 400ms ease-in-out; }
+
+.btn-shine { position: relative; }
+
+/* ───── Quiet motion: iOS springs, meaningful and short; all off with "Reduce Motion" ───── */
+/* Avatar ring: indigo hairline while unheard, grey once heard, a rotating arc while playing. */
+.story-ring {
+  position: relative;
+  border-radius: 9999px;
+  padding: 3.5px;
+  background: var(--link);
+}
+/* the gap between ring and photo: a canvas-coloured halo, leaving a 1.5px ring */
+.story-ring > * { border-radius: 9999px; box-shadow: 0 0 0 2px var(--background); }
+.story-ring.seen { background: var(--border); }
+.story-ring.spin { background: conic-gradient(from var(--ring-angle, 0deg), var(--link) 0 35%, var(--border) 35% 100%); animation: ring-spin 1.1s linear infinite; }
+@property --ring-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+@keyframes ring-spin { to { --ring-angle: 360deg; } }
+
+/* Springs (iOS): sliding indicators, morphing buttons, sheets. */
+.ease-spring { transition: transform 450ms cubic-bezier(0.32, 0.72, 0, 1), width 450ms cubic-bezier(0.32, 0.72, 0, 1), height 450ms cubic-bezier(0.32, 0.72, 0, 1), border-radius 450ms cubic-bezier(0.32, 0.72, 0, 1), background-color 300ms ease, opacity 300ms ease; }
+
+/* A playing waveform: played bars breathe. */
+@keyframes wave-breathe { 0%, 100% { transform: scaleY(1); } 50% { transform: scaleY(0.6); } }
+.wave-live > * { animation: wave-breathe 1.1s ease-in-out infinite; }
+.wave-live > *:nth-child(3n) { animation-delay: 250ms; }
+.wave-live > *:nth-child(3n + 1) { animation-delay: 500ms; }
+
+/* Floating things arrive from below (mini player, toasts of our own). */
+@keyframes slide-up { from { transform: translateY(120%); opacity: 0; } to { transform: none; opacity: 1; } }
+.animate-slide-up { animation: slide-up 500ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* Recording: the red button breathes out a ring. */
+@keyframes rec-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--live) 35%, transparent); } 100% { box-shadow: 0 0 0 22px color-mix(in oklab, var(--live) 0%, transparent); } }
+.animate-rec-pulse { animation: rec-pulse 1.4s cubic-bezier(0.2, 0.8, 0.2, 1) infinite; }
+
+/* Counters: a new number rolls in from below (render it with key={n}). */
+@keyframes tick-in { from { transform: translateY(60%); opacity: 0; } to { transform: none; opacity: 1; } }
+.animate-tick { display: inline-block; animation: tick-in 380ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+
+/* Like: the heart pops; double-tap: a big heart bursts over the post. */
+@keyframes like-pop {
+  0% { transform: scale(1); }
+  25% { transform: scale(1.32); }
+  45% { transform: scale(0.9); }
+  65% { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+.animate-like-pop { animation: like-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+@keyframes heart-burst {
+  0% { opacity: 0; transform: scale(0.2) rotate(-12deg); }
+  15% { opacity: 0.95; transform: scale(1.18) rotate(4deg); }
+  30% { transform: scale(0.94) rotate(0deg); }
+  45% { transform: scale(1.04); }
+  75% { opacity: 0.95; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.9) translateY(-60px); }
+}
+.animate-heart-burst { animation: heart-burst 900ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+/* Lists come in with a short stagger. */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.stagger > * { animation: rise-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(n + 7) { animation-delay: 240ms; }
+
+/* Skeleton shimmer while loading. */
+.skeleton { position: relative; overflow: hidden; background: var(--secondary); }
+.skeleton::after {
+  content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--border) 90%, transparent), transparent);
+  animation: shimmer 1.3s ease-in-out infinite;
+}
+
+/* Tab indicators glide between tabs. */
+.nav-pill { transition: transform 450ms cubic-bezier(0.32, 0.72, 0, 1), opacity 200ms ease; }
+
+/* Page transitions (View Transitions API, types set by the router): pushed screens slide in from the right and
+   slide back out; switching tabs cross-fades. The tab capsule stays put. */
+@keyframes vt-in-right { from { transform: translateX(100%); } }
+@keyframes vt-out-left { to { transform: translateX(-30%); opacity: 0.55; } }
+@keyframes vt-in-left { from { transform: translateX(-30%); opacity: 0.55; } }
+@keyframes vt-out-right { to { transform: translateX(100%); } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+@keyframes vt-fade-out { to { opacity: 0; } }
+::view-transition-group(root) { animation-duration: 340ms; animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1); }
+html:active-view-transition-type(push)::view-transition-new(root) { animation: vt-in-right 340ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+html:active-view-transition-type(push)::view-transition-old(root) { animation: vt-out-left 340ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+html:active-view-transition-type(pop)::view-transition-new(root) { animation: vt-in-left 340ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+html:active-view-transition-type(pop)::view-transition-old(root) { animation: vt-out-right 340ms cubic-bezier(0.32, 0.72, 0, 1) both; z-index: 1; }
+html:active-view-transition-type(tab)::view-transition-new(root) { animation: vt-fade-in 180ms ease-out both; }
+html:active-view-transition-type(tab)::view-transition-old(root) { animation: vt-fade-out 120ms ease-in both; }
+::view-transition-group(tabbar), ::view-transition-group(miniplayer) { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Horizontal chip rows scroll without a visible scrollbar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}

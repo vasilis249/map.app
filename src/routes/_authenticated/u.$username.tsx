@@ -1,0 +1,94 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
+import { MoreHorizontal, RadioTower } from "lucide-react";
+import { toast } from "sonner";
+import { AppHeader } from "@/components/app-header";
+import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
+import { UserAvatar } from "@/components/user-avatar";
+import { useAuth } from "@/hooks/use-auth";
+import { friendKeys, profileByUsername, profileStats, rpcErrorKey, setFollowing } from "@/lib/friends";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/_authenticated/u/$username")({
+  component: ProfilePage,
+});
+
+/** Someone's profile: photo, name, @username, bio, counts, Follow, Walkie (friends), ⋯ report / block. */
+function ProfilePage() {
+  const { username } = Route.useParams();
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const [actions, setActions] = useState(false);
+  const person = useQuery({ queryKey: friendKeys.byUsername(username), queryFn: () => profileByUsername(username) });
+  const p = person.data;
+  const stats = useQuery({ queryKey: friendKeys.stats(p?.id ?? ""), queryFn: () => profileStats(p!.id), enabled: !!p });
+  const follow = useMutation({
+    mutationFn: (on: boolean) => setFollowing(p!.id, on),
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: friendKeys.all });
+      void qc.invalidateQueries({ queryKey: ["walkie"] });
+    },
+    onError: (e) => toast.error(t(rpcErrorKey(e))),
+  });
+  const s = stats.data;
+  const mine = p?.id === user?.id;
+  const friends = !!s?.i_follow && !!s?.follows_me;
+
+  return (
+    <>
+      <AppHeader
+        back
+        title={p ? `@${p.username}` : ""}
+        right={
+          p && !mine ? (
+            <button type="button" onClick={() => setActions(true)} aria-label={t("friends.actions")} className="grid h-11 w-11 place-items-center rounded-full">
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+          ) : null
+        }
+      />
+      {person.isSuccess && !p && <p className="px-4 py-10 text-center text-callout text-muted-foreground">{t("profile.notFound")}</p>}
+      {p && (
+        <div className="flex flex-col items-center px-4 pb-8 pt-4 text-center">
+          <span className={cn("rounded-full p-1 ring-4", friends ? "ring-success" : "ring-transparent")}>
+            <UserAvatar name={p.full_name || p.username} path={p.avatar_path} size={96} />
+          </span>
+          <h1 className="mt-3 text-display">{p.full_name || p.username}</h1>
+          <p className="text-callout text-muted-foreground">@{p.username}</p>
+          {p.bio && <p className="mt-2 max-w-sm whitespace-pre-line text-callout">{p.bio}</p>}
+          {s && (
+            <p className="mt-3 text-caption text-muted-foreground">
+              <b className="text-foreground">{s.followers}</b> {t("profile.followers")} · <b className="text-foreground">{s.following}</b> {t("profile.following")}
+            </p>
+          )}
+          {friends && <p className="mt-1 text-caption font-semibold text-success">{t("profile.friends")}</p>}
+          {s && !mine && (
+            <div className="mt-5 grid w-full max-w-sm grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={follow.isPending}
+                onClick={() => follow.mutate(!s.i_follow)}
+                className={cn("h-12 rounded-full font-semibold", s.i_follow ? "bg-secondary" : "bg-primary text-primary-foreground")}
+              >
+                {s.i_follow ? t("profile.unfollow") : s.follows_me ? t("profile.followBack") : t("profile.follow")}
+              </button>
+              {friends ? (
+                <Link to="/talk/$userId" params={{ userId: p.id }} className="flex h-12 items-center justify-center gap-2 rounded-full bg-secondary font-semibold">
+                  <RadioTower className="h-5 w-5" /> {t("profile.talk")}
+                </Link>
+              ) : (
+                <span className="flex h-12 items-center justify-center rounded-full bg-secondary px-3 text-caption text-muted-foreground">
+                  {t("walkie.friendsOnly")}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      <PersonActionsSheet person={actions && p ? p : null} onOpenChange={(o) => !o && setActions(false)} />
+    </>
+  );
+}

@@ -1,0 +1,7 @@
+*.log
+*.pid
+*.png
+storage-files/
+tone440.wav
+pgrst/postgrest
+pgrst/*.tar.xz

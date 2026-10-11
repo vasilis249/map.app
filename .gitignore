@@ -17,3 +17,4 @@ ios/App/Pods/
 ios/DerivedData/
 ios/App/App.xcodeproj/xcuserdata/
 ios/App/App.xcworkspace/xcuserdata/
+.dev.vars
