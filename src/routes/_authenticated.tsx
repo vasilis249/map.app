@@ -44,8 +44,19 @@ function AuthenticatedLayout() {
         </div>
       </main>
     ) : null;
+  const leave = () => void signOut(qc).then(() => navigate({ to: "/login", replace: true }));
+  if (profile.data.disabled)
+    return (
+      <main className="safe-top mx-auto flex min-h-dvh max-w-sm flex-col justify-center gap-4 px-6">
+        <h1 className="text-display">{t("auth.disabledTitle")}</h1>
+        <p className="text-callout text-muted-foreground">{t("auth.disabledText")}</p>
+        <button type="button" onClick={leave} className="h-12 rounded-full bg-secondary font-semibold">
+          {t("auth.signOut")}
+        </button>
+      </main>
+    );
   if (!profile.data.age_confirmed_at)
-    return <AgeGate onSignOut={() => void signOut(qc).then(() => navigate({ to: "/login", replace: true }))} />;
+    return <AgeGate onSignOut={leave} />;
   return (
     <div className="flex min-h-dvh flex-col pb-[calc(env(safe-area-inset-bottom)+6rem)]">
       <LocationSync />

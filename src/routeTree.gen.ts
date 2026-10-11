@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
+import { Route as AuthenticatedBlockedRouteImport } from './routes/_authenticated/blocked'
 import { Route as AuthenticatedLocationRouteImport } from './routes/_authenticated/location'
 import { Route as AuthenticatedMapRouteImport } from './routes/_authenticated/map'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
@@ -21,6 +23,7 @@ import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedTalkIndexRouteImport } from './routes/_authenticated/talk.index'
 import { Route as AuthenticatedTalkUserIdRouteImport } from './routes/_authenticated/talk.$userId'
 import { Route as AuthenticatedUUsernameRouteImport } from './routes/_authenticated/u.$username'
+import { Route as AuthenticatedPeopleUserIdListRouteImport } from './routes/_authenticated/people.$userId.$list'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -40,6 +43,16 @@ const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedBlockedRoute = AuthenticatedBlockedRouteImport.update({
+  id: '/blocked',
+  path: '/blocked',
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedLocationRoute = AuthenticatedLocationRouteImport.update({
   id: '/location',
@@ -82,11 +95,19 @@ const AuthenticatedUUsernameRoute = AuthenticatedUUsernameRouteImport.update({
   path: '/u/$username',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedPeopleUserIdListRoute =
+  AuthenticatedPeopleUserIdListRouteImport.update({
+    id: '/people/$userId/$list',
+    path: '/people/$userId/$list',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/admin': typeof AuthenticatedAdminRoute
+  '/blocked': typeof AuthenticatedBlockedRoute
   '/location': typeof AuthenticatedLocationRoute
   '/map': typeof AuthenticatedMapRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -95,11 +116,14 @@ export interface FileRoutesByFullPath {
   '/talk/$userId': typeof AuthenticatedTalkUserIdRoute
   '/u/$username': typeof AuthenticatedUUsernameRoute
   '/talk/': typeof AuthenticatedTalkIndexRoute
+  '/people/$userId/$list': typeof AuthenticatedPeopleUserIdListRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/admin': typeof AuthenticatedAdminRoute
+  '/blocked': typeof AuthenticatedBlockedRoute
   '/location': typeof AuthenticatedLocationRoute
   '/map': typeof AuthenticatedMapRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -108,6 +132,7 @@ export interface FileRoutesByTo {
   '/talk/$userId': typeof AuthenticatedTalkUserIdRoute
   '/u/$username': typeof AuthenticatedUUsernameRoute
   '/talk': typeof AuthenticatedTalkIndexRoute
+  '/people/$userId/$list': typeof AuthenticatedPeopleUserIdListRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -115,6 +140,8 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRoute
+  '/_authenticated/blocked': typeof AuthenticatedBlockedRoute
   '/_authenticated/location': typeof AuthenticatedLocationRoute
   '/_authenticated/map': typeof AuthenticatedMapRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
@@ -123,6 +150,7 @@ export interface FileRoutesById {
   '/_authenticated/talk/$userId': typeof AuthenticatedTalkUserIdRoute
   '/_authenticated/u/$username': typeof AuthenticatedUUsernameRoute
   '/_authenticated/talk/': typeof AuthenticatedTalkIndexRoute
+  '/_authenticated/people/$userId/$list': typeof AuthenticatedPeopleUserIdListRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -130,6 +158,8 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/admin'
+    | '/blocked'
     | '/location'
     | '/map'
     | '/notifications'
@@ -138,11 +168,14 @@ export interface FileRouteTypes {
     | '/talk/$userId'
     | '/u/$username'
     | '/talk/'
+    | '/people/$userId/$list'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/signup'
+    | '/admin'
+    | '/blocked'
     | '/location'
     | '/map'
     | '/notifications'
@@ -151,12 +184,15 @@ export interface FileRouteTypes {
     | '/talk/$userId'
     | '/u/$username'
     | '/talk'
+    | '/people/$userId/$list'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/login'
     | '/signup'
+    | '/_authenticated/admin'
+    | '/_authenticated/blocked'
     | '/_authenticated/location'
     | '/_authenticated/map'
     | '/_authenticated/notifications'
@@ -165,6 +201,7 @@ export interface FileRouteTypes {
     | '/_authenticated/talk/$userId'
     | '/_authenticated/u/$username'
     | '/_authenticated/talk/'
+    | '/_authenticated/people/$userId/$list'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -203,6 +240,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/blocked': {
+      id: '/_authenticated/blocked'
+      path: '/blocked'
+      fullPath: '/blocked'
+      preLoaderRoute: typeof AuthenticatedBlockedRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/location': {
       id: '/_authenticated/location'
@@ -260,10 +311,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUUsernameRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/people/$userId/$list': {
+      id: '/_authenticated/people/$userId/$list'
+      path: '/people/$userId/$list'
+      fullPath: '/people/$userId/$list'
+      preLoaderRoute: typeof AuthenticatedPeopleUserIdListRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
+  AuthenticatedBlockedRoute: typeof AuthenticatedBlockedRoute
   AuthenticatedLocationRoute: typeof AuthenticatedLocationRoute
   AuthenticatedMapRoute: typeof AuthenticatedMapRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
@@ -272,9 +332,12 @@ interface AuthenticatedRouteChildren {
   AuthenticatedTalkUserIdRoute: typeof AuthenticatedTalkUserIdRoute
   AuthenticatedUUsernameRoute: typeof AuthenticatedUUsernameRoute
   AuthenticatedTalkIndexRoute: typeof AuthenticatedTalkIndexRoute
+  AuthenticatedPeopleUserIdListRoute: typeof AuthenticatedPeopleUserIdListRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedAdminRoute: AuthenticatedAdminRoute,
+  AuthenticatedBlockedRoute: AuthenticatedBlockedRoute,
   AuthenticatedLocationRoute: AuthenticatedLocationRoute,
   AuthenticatedMapRoute: AuthenticatedMapRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,
@@ -283,6 +346,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedTalkUserIdRoute: AuthenticatedTalkUserIdRoute,
   AuthenticatedUUsernameRoute: AuthenticatedUUsernameRoute,
   AuthenticatedTalkIndexRoute: AuthenticatedTalkIndexRoute,
+  AuthenticatedPeopleUserIdListRoute: AuthenticatedPeopleUserIdListRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

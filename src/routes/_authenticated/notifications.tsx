@@ -3,7 +3,9 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { AppHeader } from "@/components/app-header";
+import { RowFollow } from "@/components/people/person-row";
 import { UserAvatar } from "@/components/user-avatar";
+import { useAuth } from "@/hooks/use-auth";
 import { listNotifications, markAllRead, notificationKeys, type AppNotification } from "@/lib/notifications";
 import { timeAgoShort } from "@/lib/time-ago";
 import { cn } from "@/lib/utils";
@@ -16,7 +18,8 @@ export const Route = createFileRoute("/_authenticated/notifications")({
 function NotificationsPage() {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
-  const list = useQuery({ queryKey: notificationKeys.list, queryFn: listNotifications });
+  const { user } = useAuth();
+  const list = useQuery({ queryKey: notificationKeys.list, queryFn: () => listNotifications(user!.id), enabled: !!user });
   const hasUnread = !!list.data?.some((n) => !n.read_at);
   useEffect(() => {
     if (!hasUnread) return;
@@ -40,14 +43,27 @@ function NotificationsPage() {
 
 function Row({ n, text, when }: { n: AppNotification; text: string; when: string }) {
   const body = (
-    <span className={cn("flex items-center gap-3 py-2.5", !n.read_at && "font-semibold")}>
+    <span className={cn("flex min-w-0 flex-1 items-center gap-3 py-2.5", !n.read_at && "font-semibold")}>
       <UserAvatar name={n.actor?.full_name || n.actor?.username || "?"} path={n.actor?.avatar_path ?? null} size={44} />
-      <span className="min-w-0 flex-1 text-callout">{text}</span>
-      <span className="text-caption text-muted-foreground">{when}</span>
+      <span className="min-w-0 flex-1 text-callout">
+        {text} <span className="font-normal text-muted-foreground">· {when}</span>
+      </span>
     </span>
   );
   if (!n.actor) return body;
-  if (n.kind === "walkie") return <Link to="/talk/$userId" params={{ userId: n.actor.id }}>{body}</Link>;
-  if (n.kind === "nearby") return <Link to="/map" search={{ u: n.actor.id }}>{body}</Link>;
-  return <Link to="/u/$username" params={{ username: n.actor.username }}>{body}</Link>;
+  const a = n.actor;
+  const link =
+    n.kind === "walkie" ? (
+      <Link to="/talk/$userId" params={{ userId: a.id }} className="min-w-0 flex-1">{body}</Link>
+    ) : n.kind === "nearby" ? (
+      <Link to="/map" search={{ u: a.id }} className="min-w-0 flex-1">{body}</Link>
+    ) : (
+      <Link to="/u/$username" params={{ username: a.username }} className="min-w-0 flex-1">{body}</Link>
+    );
+  return (
+    <span className="flex items-center gap-2">
+      {link}
+      {n.kind === "follow" && <RowFollow person={{ ...a, i_follow: n.i_follow, follows_me: true }} />}
+    </span>
+  );
 }

@@ -2,10 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Volume2 } from "lucide-react";
+import { MoreHorizontal, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "@/components/app-header";
+import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { Switch } from "@/components/ui/switch";
 import { useWalkieList } from "@/components/walkie/walkie-hub";
 import { UserAvatar } from "@/components/user-avatar";
@@ -77,6 +78,7 @@ function TalkPage() {
   // Press → talk, release → stop; a release that comes while the mic is still starting stops it right after.
   const held = useRef(false);
   const [denied, setDenied] = useState(false);
+  const [actions, setActions] = useState(false);
   async function down(e: PointerEvent<HTMLButtonElement>) {
     if (e.button !== 0 || held.current) return;
     e.preventDefault();
@@ -118,7 +120,18 @@ function TalkPage() {
   const disabled = !friends || !s?.connected;
   return (
     <>
-      <AppHeader back title={t("walkie.title")} />
+      <AppHeader
+        back
+        title={t("walkie.title")}
+        right={
+          other.data ? (
+            <button type="button" onClick={() => setActions(true)} aria-label={t("friends.actions")} className="grid h-11 w-11 place-items-center rounded-full">
+              <MoreHorizontal className="h-5 w-5" />
+            </button>
+          ) : null
+        }
+      />
+      <PersonActionsSheet person={actions && other.data ? other.data : null} onOpenChange={(o) => !o && setActions(false)} />
       <div className="flex flex-1 select-none flex-col items-center px-4 pb-8 pt-4">
         <div className="relative">
           <span

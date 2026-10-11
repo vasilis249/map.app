@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { MoreHorizontal, RadioTower } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { FollowButton } from "@/components/friends/follow-button";
+import { FollowCounts } from "@/components/people/follow-counts";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { UserAvatar } from "@/components/user-avatar";
 import { useAuth } from "@/hooks/use-auth";
@@ -50,11 +51,7 @@ function ProfilePage() {
           <h1 className="mt-3 text-display">{p.full_name || p.username}</h1>
           <p className="text-callout text-muted-foreground">@{p.username}</p>
           {p.bio && <p className="mt-2 max-w-sm whitespace-pre-line text-callout">{p.bio}</p>}
-          {s && (
-            <p className="mt-3 text-caption text-muted-foreground">
-              <b className="text-foreground">{s.followers}</b> {t("profile.followers")} · <b className="text-foreground">{s.following}</b> {t("profile.following")}
-            </p>
-          )}
+          {s && <FollowCounts userId={p.id} stats={s} className="mt-3" />}
           {friends && <p className="mt-1 text-caption font-semibold text-success">{t("profile.friends")}</p>}
           {s && !mine && (
             <div className="mt-5 grid w-full max-w-sm grid-cols-2 gap-2">

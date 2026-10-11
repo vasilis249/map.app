@@ -42,8 +42,10 @@ export async function suggestedPeople(limit = 10): Promise<Person[]> {
   return unwrap(await supabase.rpc("suggested_people", { p_limit: limit })) ?? [];
 }
 
-export async function followList(user: string, which: "followers" | "following"): Promise<Person[]> {
-  return unwrap(await supabase.rpc("follow_list", { p_user: user, p_which: which, p_limit: 100 })) ?? [];
+/** One page of someone's followers / following (newest first). Pages are LIST_PAGE long; a shorter one is the last. */
+export const LIST_PAGE = 50;
+export async function followList(user: string, which: "followers" | "following", offset = 0): Promise<Person[]> {
+  return unwrap(await supabase.rpc("follow_list", { p_user: user, p_which: which, p_limit: LIST_PAGE, p_offset: offset })) ?? [];
 }
 
 export async function profileStats(user: string): Promise<ProfileStats | null> {

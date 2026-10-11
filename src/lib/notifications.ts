@@ -7,6 +7,8 @@ export interface AppNotification {
   created_at: string;
   read_at: string | null;
   actor: { id: string; username: string; full_name: string; avatar_path: string | null } | null;
+  /** Do I follow the actor? (for "Follow back" on follow notices) */
+  i_follow: boolean;
 }
 
 export const notificationKeys = {
@@ -15,14 +17,22 @@ export const notificationKeys = {
   unread: ["notifications", "unread"] as const,
 };
 
-export async function listNotifications(): Promise<AppNotification[]> {
+export async function listNotifications(me: string): Promise<AppNotification[]> {
   const { data, error } = await supabase
     .from("notifications")
     .select("id, kind, created_at, read_at, actor:profiles!notifications_actor_id_fkey(id, username, full_name, avatar_path)")
     .order("created_at", { ascending: false })
     .limit(60);
   if (error) throw new Error(error.message);
-  return (data ?? []) as unknown as AppNotification[];
+  const rows = (data ?? []) as unknown as Omit<AppNotification, "i_follow">[];
+  const actors = [...new Set(rows.flatMap((n) => (n.actor ? [n.actor.id] : [])))];
+  let following = new Set<string>();
+  if (actors.length) {
+    const f = await supabase.from("follows").select("followee_id").eq("follower_id", me).in("followee_id", actors);
+    if (f.error) throw new Error(f.error.message);
+    following = new Set(f.data.map((x) => x.followee_id));
+  }
+  return rows.map((n) => ({ ...n, i_follow: !!n.actor && following.has(n.actor.id) }));
 }
 
 export async function unreadCount(): Promise<number> {

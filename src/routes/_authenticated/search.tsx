@@ -1,22 +1,23 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useDeferredValue, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
-import { UserAvatar } from "@/components/user-avatar";
-import { friendKeys, searchUsers } from "@/lib/friends";
+import { PersonRow, RowFollow } from "@/components/people/person-row";
+import { friendKeys, searchUsers, suggestedPeople } from "@/lib/friends";
 
 export const Route = createFileRoute("/_authenticated/search")({
   component: SearchPage,
 });
 
-/** Find people by name (Greek or Latin) or @username. */
+/** Find people by name (Greek or Latin) or @username; people to follow while the box is empty. */
 function SearchPage() {
   const { t } = useTranslation();
   const [q, setQ] = useState("");
   const term = useDeferredValue(q.trim().replace(/^@/, ""));
   const results = useQuery({ queryKey: friendKeys.search(term), queryFn: () => searchUsers(term), enabled: term.length >= 2 });
+  const suggested = useQuery({ queryKey: friendKeys.suggested, queryFn: () => suggestedPeople(15), enabled: term.length === 0 });
   return (
     <>
       <AppHeader large={t("search.title")} />
@@ -34,25 +35,25 @@ function SearchPage() {
             className="h-full flex-1 bg-transparent outline-none"
           />
         </label>
-        {term.length < 2 ? (
+        {term.length === 0 ? (
+          (suggested.data?.length ?? 0) > 0 && (
+            <section className="pt-4">
+              <h2 className="pb-1 text-callout font-semibold text-muted-foreground">{t("search.suggested")}</h2>
+              <ul>
+                {suggested.data!.map((p) => (
+                  <PersonRow key={p.id} person={p} right={<RowFollow person={p} />} />
+                ))}
+              </ul>
+            </section>
+          )
+        ) : term.length < 2 ? (
           <p className="py-6 text-center text-caption text-muted-foreground">{t("search.hint")}</p>
         ) : results.data && !results.data.length ? (
           <p className="py-6 text-center text-caption text-muted-foreground">{t("search.empty")}</p>
         ) : (
           <ul className="pt-2">
             {(results.data ?? []).map((p) => (
-              <li key={p.id}>
-                <Link to="/u/$username" params={{ username: p.username }} className="flex items-center gap-3 py-2.5">
-                  <UserAvatar name={p.full_name || p.username} path={p.avatar_path} size={48} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">{p.full_name || p.username}</span>
-                    <span className="block truncate text-caption text-muted-foreground">
-                      @{p.username}
-                      {p.i_follow && p.follows_me ? ` · ${t("map.friend")}` : ""}
-                    </span>
-                  </span>
-                </Link>
-              </li>
+              <PersonRow key={p.id} person={p} right={<RowFollow person={p} />} />
             ))}
           </ul>
         )}

@@ -2,10 +2,12 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Camera, ChevronRight, MapPin } from "lucide-react";
+import { Ban, Camera, ChevronRight, MapPin, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
+import { FollowCounts } from "@/components/people/follow-counts";
 import { UserAvatar } from "@/components/user-avatar";
+import { amIAdmin, moderationKeys } from "@/lib/moderation";
 import { supabase } from "@/integrations/supabase/client";
 import { useMyProfile } from "@/hooks/use-my-profile";
 import { uploadAvatar } from "@/lib/avatar";
@@ -25,6 +27,7 @@ function MyProfilePage() {
   const navigate = useNavigate();
   const me = useMyProfile();
   const stats = useQuery({ queryKey: friendKeys.stats(me.data?.id ?? ""), queryFn: () => profileStats(me.data!.id), enabled: !!me.data });
+  const admin = useQuery({ queryKey: moderationKeys.admin, queryFn: amIAdmin });
   const [form, setForm] = useState({ full_name: "", username: "", bio: "" });
   const file = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -89,12 +92,7 @@ function MyProfilePage() {
             <div className="min-w-0">
               <p className="truncate text-tagline">{p.full_name || p.username}</p>
               <p className="truncate text-callout text-muted-foreground">@{p.username}</p>
-              {stats.data && (
-                <p className="mt-1 text-caption text-muted-foreground">
-                  <b className="text-foreground">{stats.data.followers}</b> {t("profile.followers")} · <b className="text-foreground">{stats.data.following}</b>{" "}
-                  {t("profile.following")}
-                </p>
-              )}
+              {stats.data && <FollowCounts userId={p.id} stats={stats.data} className="mt-1" />}
             </div>
           </div>
 
@@ -141,11 +139,25 @@ function MyProfilePage() {
             </button>
           </section>
 
-          <Link to="/location" className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3.5">
-            <MapPin className="h-5 w-5 text-link" />
-            <span className="flex-1 font-semibold">{t("profile.location")}</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
+          <div className="divide-y divide-border overflow-hidden rounded-2xl bg-card">
+            <Link to="/location" className="flex items-center gap-3 px-4 py-3.5">
+              <MapPin className="h-5 w-5 text-link" />
+              <span className="flex-1 font-semibold">{t("profile.location")}</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Link>
+            <Link to="/blocked" className="flex items-center gap-3 px-4 py-3.5">
+              <Ban className="h-5 w-5 text-muted-foreground" />
+              <span className="flex-1 font-semibold">{t("blocked.title")}</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Link>
+            {admin.data && (
+              <Link to="/admin" className="flex items-center gap-3 px-4 py-3.5">
+                <ShieldCheck className="h-5 w-5 text-link" />
+                <span className="flex-1 font-semibold">{t("admin.title")}</span>
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            )}
+          </div>
 
           <button type="button" onClick={() => void leave()} className="h-12 w-full rounded-full bg-secondary font-semibold text-destructive">
             {t("auth.signOut")}
