@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.output/
+.wrangler/
+.tanstack/
+.env
+.env.*
+!.env.example
+.dev.vars
+*.log
+.DS_Store
+# Capacitor generated
+ios/App/App/capacitor.config.json
+ios/App/App/public/
+capacitor/www/server-url.js
+ios/App/Pods/
+ios/DerivedData/
+ios/App/App.xcodeproj/xcuserdata/
+ios/App/App.xcworkspace/xcuserdata/
