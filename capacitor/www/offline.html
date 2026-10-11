@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Offline</title>
+    <script src="server-url.js"></script>
+    <style>
+      :root { color-scheme: light dark; font-family: -apple-system, system-ui, sans-serif; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: Canvas; color: CanvasText; text-align: center; padding: 24px; box-sizing: border-box; }
+      h1 { font-size: 22px; margin: 0 0 8px; }
+      p { margin: 0 0 24px; opacity: 0.7; line-height: 1.4; }
+      button { font: inherit; font-weight: 600; height: 48px; padding: 0 32px; border-radius: 999px; border: 0; background: CanvasText; color: Canvas; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="t">Χωρίς σύνδεση</h1>
+      <p id="m">Δεν μπορούμε να φτάσουμε στην εφαρμογή. Έλεγξε το ίντερνετ και δοκίμασε ξανά.</p>
+      <button id="b" type="button">Δοκίμασε ξανά</button>
+    </main>
+    <script>
+      if (!/^el\b/i.test(navigator.language || "")) {
+        document.getElementById("t").textContent = "You're offline";
+        document.getElementById("m").textContent = "We can't reach the app. Check your internet connection and try again.";
+        document.getElementById("b").textContent = "Try again";
+      }
+      document.getElementById("b").onclick = function () {
+        if (window.APP_SERVER_URL) window.location.replace(window.APP_SERVER_URL);
+      };
+    </script>
+  </body>
+</html>

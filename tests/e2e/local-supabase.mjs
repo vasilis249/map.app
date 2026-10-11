@@ -116,7 +116,7 @@ async function auth(req, res, url, bearer) {
   return fail(404, "not_found", "not implemented locally");
 }
 
-if (process.argv[1].endsWith("local-supabase.mjs")) {
+if (process.argv[1]?.endsWith("local-supabase.mjs")) {
   attachRealtime(http
     .createServer((req, res) => {
       const url = new URL(req.url, "http://x");

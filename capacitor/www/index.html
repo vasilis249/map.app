@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="el">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>MapApp</title>
+    <script src="server-url.js"></script>
+  </head>
+  <body>
+    <!-- Never shown normally: the shell loads server.url. Fallback if it was opened directly. -->
+    <script>
+      if (window.APP_SERVER_URL) window.location.replace(window.APP_SERVER_URL);
+    </script>
+  </body>
+</html>

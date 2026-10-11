@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CAPACITOR_DEBUG</key>
+	<string>$(CAPACITOR_DEBUG)</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+        <string>MapApp</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+            <key>UISceneConfigurationName</key>
+            <string>Default Configuration</string>
+            <key>UISceneDelegateClassName</key>
+            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+            <key>UISceneStoryboardFile</key>
+            <string>Main</string>
+        </dict>
+      </array>
+    </dict>
+	</dict>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+	<key>UIRequiredDeviceCapabilities</key>
+	<array>
+		<string>armv7</string>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<!-- Voice guidance while navigating and push-to-talk audio with the screen off -->
+		<string>audio</string>
+		<!-- Turn-by-turn navigation and location sharing while the app is in the background -->
+		<string>location</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>el</string>
+		<string>en</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<!-- Auth email deep links (mapapp://app/...), see src/lib/native.ts. PLACEHOLDER until the name decision. -->
+				<string>mapapp</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>MapApp uses the camera only when you take a profile photo.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>MapApp opens your photos only so you can choose a profile photo.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>MapApp uses your location for the map and turn-by-turn navigation. Your position is shared only if you turn sharing on, with the people you choose (friends, or people within 200 m).</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>With "Always", navigation keeps guiding you with the screen off, and the people you chose still see you while the app is closed. You can turn sharing off at any time.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>With "Always", navigation keeps guiding you with the screen off, and the people you chose still see you while the app is closed. You can turn sharing off at any time.</string>
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>PreciseMap</key>
+		<string>MapApp needs your precise location to navigate and to show exactly where you are, to you and to the people you share with.</string>
+	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>MapApp uses the microphone only while you hold the talk button, so the person you talk to hears you.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>

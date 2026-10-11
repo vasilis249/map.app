@@ -109,6 +109,13 @@ ok("follow from the profile (stored, button turns to 'Ακολουθείς')",
 ok("Nikos got a follow notification", sql(`select count(*) from public.notifications where user_id = '33333333-0000-0000-0000-000000000003' and actor_id = '${uid}' and kind = 'follow'`) === "1");
 await page.screenshot({ path: `${S}/auth-3-profile-other.png` });
 
+// 8. Every screen opens (ported kit screens included) without page errors
+for (const [path, text] of [["/talk", "Κανένας φίλος ακόμα"], ["/location", "Κανείς (αόρατος)"], ["/notifications", "Ειδοποιήσεις"], ["/talk/33333333-0000-0000-0000-000000000003", "μόνο αν ακολουθείτε"]]) {
+  await page.goto(base + path, { waitUntil: "load" });
+  ok(`${path} opens ("${text}")`, await seen(page.getByText(text)));
+}
+await page.screenshot({ path: `${S}/auth-4-walkie-outsider.png` });
+
 console.log("errors:", errors.length ? [...new Set(errors)].join(" | ") : "none");
 ok("no page errors", errors.length === 0);
 await browser.close();
