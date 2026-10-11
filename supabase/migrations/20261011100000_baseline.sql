@@ -242,9 +242,13 @@ CREATE TABLE public.reports (
   target_id uuid,
   reason text NOT NULL DEFAULT '' CHECK (char_length(reason) <= 500),
   created_at timestamptz NOT NULL DEFAULT now(),
-  resolved_at timestamptz
+  resolved_at timestamptz,
+  resolved_by uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
+  resolution text CHECK (resolution IN ('dismissed', 'disabled')),
+  CHECK ((resolved_at IS NULL) = (resolution IS NULL))
 );
 CREATE INDEX reports_open ON public.reports (created_at) WHERE resolved_at IS NULL;
+CREATE INDEX reports_target ON public.reports (target_user_id, created_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- 6. Location sharing (live map)
@@ -1043,6 +1047,93 @@ BEGIN
   PERFORM private.rate_limit('report', 20, interval '1 hour');
   INSERT INTO public.reports (reporter_id, target_user_id, kind, target_id, reason)
   VALUES (uid, target_user, p_kind, CASE WHEN p_kind = 'user' THEN NULL ELSE p_target END, left(coalesce(p_reason, ''), 500));
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- 11b. Moderation (admins only: private.admins, granted by SQL). Every action is recorded on the report.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION private.admin_me()
+RETURNS uuid LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := private.me();
+BEGIN
+  IF NOT private.is_admin(uid) THEN RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501'; END IF;
+  RETURN uid;
+END $$;
+
+-- The queue: open reports first (newest first), or the resolved ones; with how many open reports the person has.
+CREATE FUNCTION public.admin_reports(p_open boolean DEFAULT true, p_limit int DEFAULT 50, p_before timestamptz DEFAULT NULL)
+RETURNS TABLE (id uuid, created_at timestamptz, kind text, reason text, target_id uuid, resolved_at timestamptz,
+               resolution text, reporter_id uuid, reporter_username text, target_user_id uuid, target_username text,
+               target_full_name text, target_avatar_path text, target_disabled boolean, target_open_reports int,
+               has_audio boolean)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM private.admin_me();
+  RETURN QUERY
+  SELECT r.id, r.created_at, r.kind, r.reason, r.target_id, r.resolved_at, r.resolution,
+         r.reporter_id, rp.username, r.target_user_id, tp.username, tp.full_name, tp.avatar_path, tp.disabled,
+         (SELECT count(*)::int FROM public.reports o WHERE o.target_user_id = r.target_user_id AND o.resolved_at IS NULL),
+         CASE r.kind
+           WHEN 'walkie' THEN EXISTS (SELECT 1 FROM private.walkie_audio a WHERE a.message_id = r.target_id)
+           WHEN 'nearby' THEN EXISTS (SELECT 1 FROM private.nearby_audio a WHERE a.message_id = r.target_id)
+           ELSE false END
+  FROM public.reports r
+  JOIN public.profiles tp ON tp.id = r.target_user_id
+  LEFT JOIN public.profiles rp ON rp.id = r.reporter_id
+  WHERE (r.resolved_at IS NULL) = coalesce(p_open, true)
+    AND (p_before IS NULL OR r.created_at < p_before)
+  ORDER BY r.created_at DESC
+  LIMIT least(greatest(coalesce(p_limit, 50), 1), 100);
+END $$;
+
+-- The reported transmission (while it is still kept, 24 h), so a moderator can hear what was said.
+CREATE FUNCTION public.admin_report_audio(p_report uuid)
+RETURNS TABLE (mime text, audio_b64 text) LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM private.admin_me();
+  RETURN QUERY
+  SELECT a.mime, encode(a.audio, 'base64') FROM public.reports r JOIN private.walkie_audio a ON a.message_id = r.target_id
+  WHERE r.id = p_report AND r.kind = 'walkie'
+  UNION ALL
+  SELECT a.mime, encode(a.audio, 'base64') FROM public.reports r JOIN private.nearby_audio a ON a.message_id = r.target_id
+  WHERE r.id = p_report AND r.kind = 'nearby';
+END $$;
+
+-- Disable / re-enable an account. Disabled: nothing works for them (private.me()), they vanish from every map,
+-- list, search and channel, and their shared position is deleted. Not yourself, not another admin.
+CREATE FUNCTION public.admin_set_disabled(p_user uuid, p_disabled boolean)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := private.admin_me();
+BEGIN
+  IF p_user IS NULL OR p_user = uid OR private.is_admin(p_user) THEN
+    RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501';
+  END IF;
+  UPDATE public.profiles SET disabled = coalesce(p_disabled, false) WHERE id = p_user;
+  IF NOT FOUND THEN RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002'; END IF;
+  IF coalesce(p_disabled, false) THEN
+    DELETE FROM private.user_locations WHERE user_id = p_user;
+    DELETE FROM public.walkie_contacts WHERE peer_id = p_user;
+  END IF;
+END $$;
+
+-- Close a report: 'dismiss' (nothing wrong) or 'disable' (the account is disabled and all its open reports close).
+CREATE FUNCTION public.admin_resolve_report(p_report uuid, p_action text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  uid uuid := private.admin_me();
+  r public.reports;
+BEGIN
+  IF p_action NOT IN ('dismiss', 'disable') THEN RAISE EXCEPTION 'bad_action' USING ERRCODE = '22023'; END IF;
+  SELECT * INTO r FROM public.reports WHERE id = p_report FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002'; END IF;
+  IF p_action = 'dismiss' THEN
+    UPDATE public.reports SET resolved_at = now(), resolved_by = uid, resolution = 'dismissed'
+    WHERE id = p_report AND resolved_at IS NULL;
+  ELSE
+    PERFORM public.admin_set_disabled(r.target_user_id, true);
+    UPDATE public.reports SET resolved_at = now(), resolved_by = uid, resolution = 'disabled'
+    WHERE target_user_id = r.target_user_id AND resolved_at IS NULL;
+  END IF;
 END $$;
 
 -- ---------------------------------------------------------------------------

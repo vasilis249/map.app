@@ -171,6 +171,8 @@ export type Database = {
           reason: string;
           created_at: string;
           resolved_at: string | null;
+          resolved_by: string | null;
+          resolution: string | null;
         };
         Insert: {
           id?: string;
@@ -181,6 +183,8 @@ export type Database = {
           reason?: string;
           created_at?: string;
           resolved_at?: string | null;
+          resolved_by?: string | null;
+          resolution?: string | null;
         };
         Update: {
           id?: string;
@@ -191,9 +195,12 @@ export type Database = {
           reason?: string;
           created_at?: string;
           resolved_at?: string | null;
+          resolved_by?: string | null;
+          resolution?: string | null;
         };
         Relationships: [
           { foreignKeyName: "reports_reporter_id_fkey"; columns: ["reporter_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "reports_resolved_by_fkey"; columns: ["resolved_by"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
           { foreignKeyName: "reports_target_user_id_fkey"; columns: ["target_user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
         ];
       };
@@ -251,6 +258,10 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      admin_report_audio: { Args: { p_report: string }; Returns: { mime: string; audio_b64: string }[] };
+      admin_reports: { Args: { p_open?: boolean; p_limit?: number; p_before?: string }; Returns: { id: string; created_at: string; kind: string; reason: string; target_id: string; resolved_at: string; resolution: string; reporter_id: string; reporter_username: string; target_user_id: string; target_username: string; target_full_name: string; target_avatar_path: string; target_disabled: boolean; target_open_reports: number; has_audio: boolean }[] };
+      admin_resolve_report: { Args: { p_report: string; p_action: string }; Returns: undefined };
+      admin_set_disabled: { Args: { p_user: string; p_disabled: boolean }; Returns: undefined };
       am_i_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
       block_user: { Args: { p_user: string }; Returns: undefined };
       confirm_age: { Args: Record<PropertyKey, never>; Returns: undefined };
