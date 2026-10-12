@@ -143,6 +143,19 @@ if (process.argv[1]?.endsWith("local-supabase.mjs")) {
           r.end();
         });
       const json = (code, obj) => { res.statusCode = code; res.setHeader("content-type", "application/json"); res.end(JSON.stringify(obj)); };
+      // List a folder (POST /object/list/<bucket> { prefix }): the caller's own rows only (RLS through PostgREST).
+      const list = url.pathname.match(/^\/storage\/v1\/object\/list\/([^/]+)$/);
+      if (list && req.method === "POST") {
+        let body = "";
+        req.on("data", (d) => (body += d));
+        req.on("end", async () => {
+          const prefix = (JSON.parse(body || "{}").prefix ?? "").replace(/\/$/, "");
+          const r = await rest("GET", `/objects?select=id,name&bucket_id=eq.${list[1]}&name=like.${encodeURIComponent(prefix + "/*")}`);
+          const rows = r.status === 200 ? JSON.parse(r.body) : [];
+          json(200, rows.map((o) => ({ id: o.id, name: o.name.slice(prefix.length + 1) })));
+        });
+        return;
+      }
       const m = url.pathname.match(/^\/storage\/v1\/object\/(sign\/|file\/|public\/)?([^/]+)\/?(.*)$/);
       if (m && m[1] === "sign/") {
         const bucket = m[2], name = decodeURIComponent(m[3]);

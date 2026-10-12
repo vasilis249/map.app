@@ -1344,6 +1344,22 @@ RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 11e. Delete my account (App Store 5.1.1(v): in the app, at any time — also when disabled or before the 18+ gate,
+-- so not private.me()). Deleting the auth user cascades to the profile and from there to everything of theirs:
+-- follows, blocks, notifications, sharing + position, talks + audio, contacts, road reports + votes + strikes, reports
+-- about them. Reports they made stay for moderation, without them (reporter_id → NULL). The app removes the profile
+-- photo through the Storage API first (Supabase doesn't allow deleting storage rows from SQL).
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION public.delete_my_account()
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := auth.uid();
+BEGIN
+  IF uid IS NULL THEN RAISE EXCEPTION 'not_allowed' USING ERRCODE = '42501'; END IF;
+  DELETE FROM private.rate_events WHERE user_id = uid;
+  DELETE FROM auth.users WHERE id = uid;
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- 12. Privileges
 -- ---------------------------------------------------------------------------
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
@@ -1364,7 +1380,7 @@ GRANT EXECUTE ON FUNCTION private.is_blocked(uuid, uuid), private.walkie_topic_o
   TO authenticated;
 
 -- ---------------------------------------------------------------------------
--- 13. Storage: public `avatars` bucket (served by URL, not listable), uploads into your own folder
+-- 13. Storage: public `avatars` bucket (served by URL, not listable by others), uploads into your own folder
 -- ---------------------------------------------------------------------------
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES ('avatars', 'avatars', true, 5242880, ARRAY['image/jpeg', 'image/png', 'image/webp'])
@@ -1374,6 +1390,10 @@ ON CONFLICT (id) DO UPDATE SET public = true, file_size_limit = EXCLUDED.file_si
 CREATE POLICY avatars_upload_own ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
 CREATE POLICY avatars_delete_own ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+-- Your own folder only (so the app can remove your old photos, and all of them when you delete your account);
+-- nobody can list anyone else's.
+CREATE POLICY avatars_list_own ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
 
 -- ---------------------------------------------------------------------------

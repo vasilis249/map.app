@@ -97,6 +97,17 @@ function SignupPage() {
           <button type="submit" disabled={busy || !valid} className="h-12 w-full rounded-full bg-primary font-semibold text-primary-foreground disabled:opacity-50">
             {t("auth.signUp")}
           </button>
+          <p className="text-center text-caption text-muted-foreground">
+            {t("legal.agreeStart")}{" "}
+            <Link to="/terms" className="font-semibold text-link">
+              {t("legal.agreeTerms")}
+            </Link>{" "}
+            {t("legal.agreeAnd")}{" "}
+            <Link to="/privacy" className="font-semibold text-link">
+              {t("legal.agreePrivacy")}
+            </Link>
+            .
+          </p>
         </>
       )}
     </AuthFrame>

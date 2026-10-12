@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { friendKeys } from "@/lib/friends";
+import { DeleteAccount } from "@/components/delete-account";
 
 /** Accounts without the 18+ declaration (the server refuses every RPC until then): confirm, or sign out. */
 export function AgeGate({ onSignOut }: { onSignOut: () => void }) {
@@ -26,6 +27,7 @@ export function AgeGate({ onSignOut }: { onSignOut: () => void }) {
       <button type="button" onClick={onSignOut} className="h-12 rounded-full bg-secondary font-semibold">
         {t("auth.signOut")}
       </button>
+      <DeleteAccount />
     </main>
   );
 }

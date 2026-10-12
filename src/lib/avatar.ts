@@ -32,7 +32,19 @@ export async function uploadAvatar(userId: string, file: File): Promise<string> 
   if (error) throw error;
   const { error: upErr } = await supabase.from("profiles").update({ avatar_path: path }).eq("id", userId);
   if (upErr) throw upErr;
+  // The old photos would stay public by URL: remove them (best effort — the new one is already in place).
+  await removeAvatars(userId, path).catch(() => undefined);
   return avatarUrl(path)!;
+}
+
+/** Remove every photo in your folder except `keep` (all of them when deleting your account). */
+export async function removeAvatars(userId: string, keep?: string) {
+  const { data, error } = await supabase.storage.from("avatars").list(userId, { limit: 100 });
+  if (error) throw error;
+  const paths = (data ?? []).map((f) => `${userId}/${f.name}`).filter((p) => p !== keep);
+  if (!paths.length) return;
+  const { error: rmErr } = await supabase.storage.from("avatars").remove(paths);
+  if (rmErr) throw rmErr;
 }
 
 /** Public URL of an avatar (the bucket is public by URL but can't be listed). */

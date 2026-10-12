@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { AgeGate } from "@/components/age-gate";
+import { DeleteAccount } from "@/components/delete-account";
 import { BottomNav } from "@/components/bottom-nav";
 import { LocationSync } from "@/components/location/location-sync";
 import { WalkieBanner, WalkieHubSync } from "@/components/walkie/walkie-hub";
@@ -53,6 +54,7 @@ function AuthenticatedLayout() {
         <button type="button" onClick={leave} className="h-12 rounded-full bg-secondary font-semibold">
           {t("auth.signOut")}
         </button>
+        <DeleteAccount />
       </main>
     );
   if (!profile.data.age_confirmed_at)

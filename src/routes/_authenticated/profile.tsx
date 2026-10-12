@@ -13,6 +13,7 @@ import { useMyProfile } from "@/hooks/use-my-profile";
 import { uploadAvatar } from "@/lib/avatar";
 import { friendKeys, profileStats, rpcErrorKey } from "@/lib/friends";
 import { signOut } from "@/lib/sign-out";
+import { DeleteAccount } from "@/components/delete-account";
 
 export const Route = createFileRoute("/_authenticated/profile")({
   component: MyProfilePage,
@@ -162,6 +163,15 @@ function MyProfilePage() {
           <button type="button" onClick={() => void leave()} className="h-12 w-full rounded-full bg-secondary font-semibold text-destructive">
             {t("auth.signOut")}
           </button>
+          <div className="flex justify-center gap-4 text-caption text-muted-foreground">
+            <Link to="/privacy" className="underline-offset-2 hover:underline">
+              {t("legal.privacy")}
+            </Link>
+            <Link to="/terms" className="underline-offset-2 hover:underline">
+              {t("legal.terms")}
+            </Link>
+          </div>
+          <DeleteAccount />
         </div>
       )}
     </>

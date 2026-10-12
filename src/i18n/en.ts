@@ -232,6 +232,22 @@ const en: Messages = {
       no_position: "We don't know where you are yet.",
     },
   },
+  account: {
+    delete: "Delete account",
+    deleteTitle: "Delete your account for good?",
+    deleteText:
+      "Your profile and photos, your location, followers, voices and road reports are deleted. This can't be undone. Reports you made about others stay for moderation, without your name.",
+    deleteConfirm: "Delete for good",
+    deleted: "Your account was deleted.",
+  },
+  legal: {
+    privacy: "Privacy policy",
+    terms: "Terms of use",
+    agreeStart: "By signing up you accept the",
+    agreeTerms: "Terms of use",
+    agreeAnd: "and the",
+    agreePrivacy: "Privacy policy",
+  },
   location: {
     title: "Location",
     intro:
