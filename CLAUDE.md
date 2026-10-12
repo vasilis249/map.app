@@ -205,12 +205,15 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   noise ≠ detour (wild fix, ±150 m fix, red light), leaving the route (debounce, one reroute, retry after a failure),
   the recorded reroute followed to the end, wrong way, starting 60 m off the road, speech queue vs talk.
 - SQL: new suite nav 11 (quota per person / kind / window / day, anon refused, age gate, disabled) → 159 PASS.
-- Browser flow `nav` (33 checks, provider mock serving the recorded answers): search, two route choices, start,
+- Browser flow `nav` (32 checks, provider mock serving the recorded answers): search, two route choices, start,
   depart sentence, wake lock, ETA, heading-up tilted camera, turns announced in order, banner + distance, someone
   within 200 m tapped and talked to while navigating with guidance waiting for the talk, off route → one new route →
   "Νέα διαδρομή." → followed, arrival, end (flat camera, wake lock released); the provider key only server-side,
   /api/nav 401 without a session, per-person counters. Also checked by curl against the built Worker: validation,
   edge cache hit, bundle guard with the key planted.
+- Harness: `serve.sh` wipes the preview Worker's edge cache (`.wrangler/state/v3/cache`) so provider calls are counted
+  per run. Before that, two runs with cached answers also failed the "flat camera after End" check; with a fresh cache
+  3 runs in a row pass — not fully explained, watch it.
 - Real bugs found by the tests and fixed: the depart repeated the first turn a second later; a looping route made the
   first fix snap 400 m ahead (wrong "Σε 300 μέτρα…" at the start); a standing phone never started guidance (no new fix
   → seeded with the last one); "02:32 μ.μ." arrival → 24-hour; you sat behind the bottom controls in follow mode;

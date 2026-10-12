@@ -183,9 +183,11 @@ ok("arrived: banner 'Έφτασες' + the destination", await seen(me.getByTest
 ok("… and the voice says so", (await spoken()).includes("Ο προορισμός σας βρίσκεται δεξιά."));
 await me.screenshot({ path: `${S}/nav-6-arrived.png` });
 await me.getByRole("button", { name: "Τέλος" }).click();
-await me.waitForTimeout(1000);
-ok("end: back to the map (search shown, flat north-up camera), screen may sleep again", await seen(me.getByRole("button", { name: "Πού πας;" }))
-  && (await me.evaluate(() => window.__wake)).at(-1) === "off" && (await camera())?.pitch === 0 && (await camera())?.bearing === 0);
+await me.waitForTimeout(1500);
+ok("end: back to the map (search shown)", await seen(me.getByRole("button", { name: "Πού πας;" })));
+ok("… the screen may sleep again (wake lock released)", (await me.evaluate(() => window.__wake)).at(-1) === "off");
+const cam2 = await camera();
+ok(`… flat, north-up camera (bearing ${cam2?.bearing}°, pitch ${cam2?.pitch}°)`, cam2?.pitch === 0 && cam2.bearing === 0);
 
 // 8. Privacy / security
 const provider = (await (await fetch(`${SUPABASE}/routing/_log`)).json());

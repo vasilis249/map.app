@@ -3,5 +3,7 @@
 S="$(cd "$(dirname "$0")" && pwd)"
 cd "$S/../.."
 [ -f $S/preview-$1.pid ] && kill $(cat $S/preview-$1.pid) 2>/dev/null
+# A fresh edge cache each time (the nav flow counts provider calls; workerd keeps its cache in .wrangler/state).
+sleep 0.5; rm -rf .wrangler/state/v3/cache
 nohup timeout 1800 npx vite preview --port $1 --host 127.0.0.1 --strictPort > $S/preview-$1.log 2>&1 < /dev/null & echo $! > $S/preview-$1.pid
 for i in $(seq 1 60); do curl -s -o /dev/null http://127.0.0.1:$1/ && break; sleep 1; done
