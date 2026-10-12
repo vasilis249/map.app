@@ -103,6 +103,8 @@ function MapPage() {
   const [listOpen, setListOpen] = useState(false);
   // Report / block someone from their card (App Store 1.2: every place you meet people has both).
   const [actionsFor, setActionsFor] = useState<MapPerson | null>(null);
+  // A specific saved transmission to report (from the card's history), else the person.
+  const [reportItem, setReportItem] = useState<string | null>(null);
   const qc = useQueryClient();
   const [focus, setFocus] = useState<MapFocus | null>(null);
   const move = (target: MapFocus["target"]) => setFocus((f) => ({ key: (f?.key ?? 0) + 1, target }));
@@ -398,7 +400,16 @@ function MapPage() {
                   </a>
                 </div>
               ) : (
-                on && <NearbyTalk person={current} />
+                on && (
+                  <NearbyTalk
+                    person={current}
+                    onReport={(item) => {
+                      setReportItem(item.id);
+                      setActionsFor(current);
+                      select(null);
+                    }}
+                  />
+                )
               )}
               <div className={cn("grid grid-cols-2 gap-2", current.is_friend ? "mt-2" : "mt-4")}>
                 <FollowButton userId={current.user_id} />
@@ -417,7 +428,12 @@ function MapPage() {
 
       <PersonActionsSheet
         person={actionsFor && { id: actionsFor.user_id, username: actionsFor.username, full_name: actionsFor.full_name, avatar_path: actionsFor.avatar_path }}
-        onOpenChange={(o) => !o && setActionsFor(null)}
+        report={reportItem ? { kind: "nearby", id: reportItem, label: t("talk.reportThis") } : undefined}
+        onOpenChange={(o) => {
+          if (o) return;
+          setActionsFor(null);
+          setReportItem(null);
+        }}
         onBlocked={() => {
           if (actionsFor) forgetNearby(actionsFor.user_id);
           void qc.invalidateQueries({ queryKey: ["location"] });

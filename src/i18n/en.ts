@@ -75,6 +75,13 @@ const en: Messages = {
       image_bad_type: "Only JPG, PNG or WEBP images.",
     },
   },
+  talk: {
+    safetyTitle: "Before you talk for the first time",
+    safetyText:
+      "Don't look at the screen while driving. The big button works by feel: hold it, speak after the beep, let go to stop. If you need to type or read, stop safely first.",
+    safetyOk: "Got it",
+    reportThis: "Report this transmission",
+  },
   people: {
     followsYou: "follows you",
     remove: "Remove",

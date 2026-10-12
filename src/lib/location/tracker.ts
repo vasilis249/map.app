@@ -77,6 +77,8 @@ export interface LocalFix {
   accuracy: number | null;
   /** Direction of travel (degrees from north) while moving, else null. */
   course: number | null;
+  /** Speed in m/s when the device reports one, else null (driving-safe UI, navigation). */
+  speed: number | null;
   at: number;
 }
 let fix: LocalFix | null = null;
@@ -91,7 +93,7 @@ function emitFix(p: Fix) {
   const now = Date.now();
   if (isJump(fix && { acc: fix.accuracy, at: fix.at }, p.accuracy, now)) return;
   const moving = p.speed != null && p.speed > 1 && p.heading != null && p.heading >= 0;
-  fix = { lat: p.lat, lng: p.lng, accuracy: p.accuracy ?? null, course: moving ? p.heading! : null, at: now };
+  fix = { lat: p.lat, lng: p.lng, accuracy: p.accuracy ?? null, course: moving ? p.heading! : null, speed: p.speed != null && p.speed >= 0 ? p.speed : null, at: now };
   fixListeners.forEach((fn) => fn(fix!));
 }
 

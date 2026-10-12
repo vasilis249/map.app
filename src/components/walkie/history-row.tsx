@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Pause, Play } from "lucide-react";
+import { Flag, Pause, Play } from "lucide-react";
 import { toast } from "sonner";
 import { base64ToBlob, formatClock, player } from "@/lib/audio";
 import { timeAgoShort } from "@/lib/time-ago";
@@ -14,12 +14,15 @@ export function HistoryRow({
   name,
   locale,
   load,
+  onReport,
 }: {
   item: WalkieItem;
   mine: boolean;
   name: string;
   locale: string;
   load: (id: string) => Promise<{ mime: string; audio_b64: string }>;
+  /** Report this transmission (shown on the other person's ones). */
+  onReport?: () => void;
 }) {
   const { t } = useTranslation();
   const [state, setState] = useState<"idle" | "loading" | "playing">("idle");
@@ -54,6 +57,11 @@ export function HistoryRow({
       <span className="text-caption tabular-nums text-muted-foreground">
         {formatClock(item.duration_ms)} · {timeAgoShort(item.created_at, locale)}
       </span>
+      {onReport && !mine && (
+        <button type="button" onClick={onReport} aria-label={t("talk.reportThis")} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground">
+          <Flag className="h-4 w-4" />
+        </button>
+      )}
     </li>
   );
 }

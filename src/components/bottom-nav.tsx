@@ -2,6 +2,7 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Bell, Map as MapIcon, RadioTower, Search, User } from "lucide-react";
+import { useWalkieList } from "@/components/walkie/walkie-hub";
 import { notificationKeys, unreadCount } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,9 @@ export function BottomNav() {
   const { t } = useTranslation();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const unread = useQuery({ queryKey: notificationKeys.unread, queryFn: unreadCount, refetchInterval: 60_000 });
+  // Friends' walkie transmissions you haven't heard yet (24 h).
+  const walkie = useWalkieList();
+  const unheard = (walkie.data ?? []).reduce((n, c) => n + c.unheard, 0);
   return (
     <nav
       aria-label="tabs"
@@ -25,12 +29,12 @@ export function BottomNav() {
     >
       {TABS.map(({ to, icon: Icon, label }) => {
         const active = path === to || path.startsWith(`${to}/`);
-        const badge = to === "/notifications" ? (unread.data ?? 0) : 0;
+        const badge = to === "/notifications" ? (unread.data ?? 0) : to === "/talk" ? unheard : 0;
         return (
           <Link
             key={to}
             to={to}
-            aria-label={t(label)}
+            aria-label={badge ? `${t(label)} (${badge})` : t(label)}
             aria-current={active ? "page" : undefined}
             className={cn("relative grid h-14 flex-1 place-items-center rounded-full", active ? "bg-nav-active text-foreground" : "text-muted-foreground")}
           >

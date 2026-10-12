@@ -4,7 +4,10 @@ import { useTranslation } from "react-i18next";
 import { Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { VoiceIcon } from "@/components/voice/voice-icon";
+import { SafetyGate } from "@/components/talk/safety-notice";
 import { HistoryRow } from "@/components/walkie/history-row";
+import { useDriving } from "@/hooks/use-driving";
+import type { WalkieItem } from "@/lib/walkie/history";
 import { useAuth } from "@/hooks/use-auth";
 import { useWalkie } from "@/hooks/use-walkie";
 import { formatClock } from "@/lib/audio";
@@ -26,9 +29,10 @@ function knockError(e: unknown): string {
  * Push to talk to someone on the map: hold and speak, they hear you live (their phone joins when the server approves
  * your knock; your first words wait here until then). Their answers play here too, and the last 24 h are below.
  */
-export function NearbyTalk({ person }: { person: MapPerson }) {
+export function NearbyTalk({ person, onReport }: { person: MapPerson; onReport?: (item: WalkieItem) => void }) {
   const { t, i18n } = useTranslation();
   const { user } = useAuth();
+  const driving = useDriving();
   const qc = useQueryClient();
   const peer = person.user_id;
   const name = person.full_name || person.username;
@@ -125,46 +129,57 @@ export function NearbyTalk({ person }: { person: MapPerson }) {
           <Volume2 className="h-4 w-4" /> {t("walkie.enableSound")}
         </button>
       )}
-      <div className="relative mt-3 grid h-36 w-36 place-items-center">
-        {s?.talking && (
-          <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 144 144" aria-hidden>
-            <circle
-              cx="72" cy="72" r="69" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-live"
-              strokeDasharray={2 * Math.PI * 69} strokeDashoffset={2 * Math.PI * 69 * (1 - Math.min(1, s.elapsedMs / WALKIE_MAX_MS))}
-            />
-          </svg>
-        )}
-        <button
-          type="button"
-          disabled={disabled}
-          onPointerDown={(e) => void down(e)}
-          onPointerUp={up}
-          onPointerCancel={up}
-          onLostPointerCapture={up}
-          onContextMenu={(e) => e.preventDefault()}
-          style={{ WebkitTouchCallout: "none", touchAction: "none" }}
-          aria-label={t("nearby.hold")}
-          className={cn(
-            "grid h-28 w-28 place-items-center rounded-full transition-transform duration-150 disabled:opacity-40",
-            s?.talking || s?.starting
-              ? "scale-105 bg-live text-destructive-foreground"
-              : s?.peerTalking
-                ? "bg-secondary text-muted-foreground"
-                : "bg-primary text-primary-foreground",
-            denied && "animate-shake",
+      <SafetyGate>
+        {/* One large target, usable by feel (no reading while driving). */}
+        <div className="relative mt-3 grid h-44 w-44 place-items-center">
+          {s?.talking && (
+            <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 176 176" aria-hidden>
+              <circle
+                cx="88" cy="88" r="85" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-live"
+                strokeDasharray={2 * Math.PI * 85} strokeDashoffset={2 * Math.PI * 85 * (1 - Math.min(1, s.elapsedMs / WALKIE_MAX_MS))}
+              />
+            </svg>
           )}
-        >
-          <VoiceIcon className="h-11 w-11" strokeWidth={1.8} live={!!s?.talking || !!s?.peerTalking} />
-        </button>
-      </div>
+          <button
+            type="button"
+            disabled={disabled}
+            onPointerDown={(e) => void down(e)}
+            onPointerUp={up}
+            onPointerCancel={up}
+            onLostPointerCapture={up}
+            onContextMenu={(e) => e.preventDefault()}
+            style={{ WebkitTouchCallout: "none", touchAction: "none" }}
+            aria-label={t("nearby.hold")}
+            className={cn(
+              "grid h-36 w-36 place-items-center rounded-full transition-transform duration-150 disabled:opacity-40",
+              s?.talking || s?.starting
+                ? "scale-105 bg-live text-destructive-foreground"
+                : s?.peerTalking
+                  ? "bg-secondary text-muted-foreground"
+                  : "bg-primary text-primary-foreground",
+              denied && "animate-shake",
+            )}
+          >
+            <VoiceIcon className="h-14 w-14" strokeWidth={1.8} live={!!s?.talking || !!s?.peerTalking} />
+          </button>
+        </div>
+      </SafetyGate>
       <p className="mt-1 h-5 text-caption tabular-nums text-muted-foreground">{s?.talking ? `${formatClock(s.elapsedMs)} / ${formatClock(WALKIE_MAX_MS)}` : ""}</p>
 
-      {items.length > 0 && (
+      {items.length > 0 && !driving && (
         <section className="mt-3 w-full">
           <h3 className="pb-1 text-callout font-semibold text-muted-foreground">{t("walkie.last24h")}</h3>
           <ul className="max-h-40 divide-y divide-border overflow-y-auto">
             {items.map((m) => (
-              <HistoryRow key={m.id} item={m} mine={m.sender_id === user?.id} name={first} locale={i18n.language} load={nearbyAudio} />
+              <HistoryRow
+                key={m.id}
+                item={m}
+                mine={m.sender_id === user?.id}
+                name={first}
+                locale={i18n.language}
+                load={nearbyAudio}
+                onReport={onReport && (() => onReport(m))}
+              />
             ))}
           </ul>
         </section>

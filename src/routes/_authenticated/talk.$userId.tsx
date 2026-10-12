@@ -11,7 +11,9 @@ import { Switch } from "@/components/ui/switch";
 import { useWalkieList } from "@/components/walkie/walkie-hub";
 import { UserAvatar } from "@/components/user-avatar";
 import { VoiceIcon } from "@/components/voice/voice-icon";
+import { SafetyGate } from "@/components/talk/safety-notice";
 import { HistoryRow } from "@/components/walkie/history-row";
+import { useDriving } from "@/hooks/use-driving";
 import { useAuth } from "@/hooks/use-auth";
 import { useWalkie } from "@/hooks/use-walkie";
 import { formatClock } from "@/lib/audio";
@@ -79,6 +81,8 @@ function TalkPage() {
   const held = useRef(false);
   const [denied, setDenied] = useState(false);
   const [actions, setActions] = useState(false);
+  const [reportItem, setReportItem] = useState<string | null>(null);
+  const driving = useDriving();
   async function down(e: PointerEvent<HTMLButtonElement>) {
     if (e.button !== 0 || held.current) return;
     e.preventDefault();
@@ -131,7 +135,15 @@ function TalkPage() {
           ) : null
         }
       />
-      <PersonActionsSheet person={actions && other.data ? other.data : null} onOpenChange={(o) => !o && setActions(false)} />
+      <PersonActionsSheet
+        person={(actions || reportItem) && other.data ? other.data : null}
+        report={reportItem ? { kind: "walkie", id: reportItem, label: t("talk.reportThis") } : undefined}
+        onOpenChange={(o) => {
+          if (o) return;
+          setActions(false);
+          setReportItem(null);
+        }}
+      />
       <div className="flex flex-1 select-none flex-col items-center px-4 pb-8 pt-4">
         <div className="relative">
           <span
@@ -161,43 +173,45 @@ function TalkPage() {
           </button>
         )}
 
-        <div className="relative mt-10 grid h-52 w-52 place-items-center">
-          {s?.talking && (
-            <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 208 208" aria-hidden>
-              <circle
-                cx="104" cy="104" r="100" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-live"
-                strokeDasharray={2 * Math.PI * 100} strokeDashoffset={2 * Math.PI * 100 * (1 - Math.min(1, s.elapsedMs / WALKIE_MAX_MS))}
-              />
-            </svg>
-          )}
-          <button
-            type="button"
-            disabled={disabled}
-            onPointerDown={(e) => void down(e)}
-            onPointerUp={up}
-            onPointerCancel={up}
-            onLostPointerCapture={up}
-            onContextMenu={(e) => e.preventDefault()}
-            style={{ WebkitTouchCallout: "none", touchAction: "none" }}
-            aria-label={t("walkie.hold")}
-            className={cn(
-              "grid h-44 w-44 place-items-center rounded-full transition-transform duration-150 disabled:opacity-40",
-              s?.talking || s?.starting
-                ? "scale-105 bg-live text-destructive-foreground"
-                : s?.peerTalking
-                  ? "bg-secondary text-muted-foreground"
-                  : "bg-primary text-primary-foreground",
-              denied && "animate-shake",
+        <SafetyGate>
+          <div className="relative mt-10 grid h-52 w-52 place-items-center">
+            {s?.talking && (
+              <svg className="pointer-events-none absolute inset-0 -rotate-90" viewBox="0 0 208 208" aria-hidden>
+                <circle
+                  cx="104" cy="104" r="100" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round" className="text-live"
+                  strokeDasharray={2 * Math.PI * 100} strokeDashoffset={2 * Math.PI * 100 * (1 - Math.min(1, s.elapsedMs / WALKIE_MAX_MS))}
+                />
+              </svg>
             )}
-          >
-            <VoiceIcon className="h-16 w-16" strokeWidth={1.8} live={!!s?.talking} />
-          </button>
-        </div>
+            <button
+              type="button"
+              disabled={disabled}
+              onPointerDown={(e) => void down(e)}
+              onPointerUp={up}
+              onPointerCancel={up}
+              onLostPointerCapture={up}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ WebkitTouchCallout: "none", touchAction: "none" }}
+              aria-label={t("walkie.hold")}
+              className={cn(
+                "grid h-44 w-44 place-items-center rounded-full transition-transform duration-150 disabled:opacity-40",
+                s?.talking || s?.starting
+                  ? "scale-105 bg-live text-destructive-foreground"
+                  : s?.peerTalking
+                    ? "bg-secondary text-muted-foreground"
+                    : "bg-primary text-primary-foreground",
+                denied && "animate-shake",
+              )}
+            >
+              <VoiceIcon className="h-16 w-16" strokeWidth={1.8} live={!!s?.talking} />
+            </button>
+          </div>
+        </SafetyGate>
         <p className="mt-4 h-5 text-caption tabular-nums text-muted-foreground">
           {s?.talking ? `${formatClock(s.elapsedMs)} / ${formatClock(WALKIE_MAX_MS)}` : friends ? t("walkie.hold") : ""}
         </p>
 
-        {friends && (
+        {friends && !driving && (
           <label className="mt-8 flex w-full items-center justify-between gap-3 rounded-2xl bg-card px-4 py-3">
             <span>
               <span className="block text-callout font-semibold">{t("walkie.channelOn")}</span>
@@ -207,13 +221,21 @@ function TalkPage() {
           </label>
         )}
 
-        {friends && (
+        {friends && !driving && (
           <section className="mt-6 w-full">
             <h2 className="pb-2 text-callout font-semibold text-muted-foreground">{t("walkie.last24h")}</h2>
             {history.data && !history.data.length && <p className="py-4 text-caption text-muted-foreground">{t("walkie.noHistory")}</p>}
             <ul className="divide-y divide-border">
               {(history.data ?? []).map((m) => (
-                <HistoryRow key={m.id} item={m} mine={m.sender_id === user?.id} name={first} locale={i18n.language} load={walkieAudio} />
+                <HistoryRow
+                  key={m.id}
+                  item={m}
+                  mine={m.sender_id === user?.id}
+                  name={first}
+                  locale={i18n.language}
+                  load={walkieAudio}
+                  onReport={() => setReportItem(m.id)}
+                />
               ))}
             </ul>
           </section>
