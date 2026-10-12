@@ -8,7 +8,7 @@ S="$(cd "$(dirname "$0")" && pwd)"
 P=${1:-8899}
 bash "$S/local-build.sh" "$P" 2>&1 | tail -1
 fail=0
-for f in ${FLOWS:-auth map social walkie walkie-ios walkie-robust walkie-hub walkie-reconnect nearby nav}; do
+for f in ${FLOWS:-auth map social walkie walkie-ios walkie-robust walkie-hub walkie-reconnect nearby nav reports}; do
   bash "$S/reset-local.sh" >/dev/null 2>&1
   rm -rf "$S/storage-files"
   out=$(cd "$S" && timeout 400 node "$f-flow.mjs" "$P" 2>&1)

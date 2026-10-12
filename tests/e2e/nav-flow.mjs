@@ -3,43 +3,10 @@
 // Playwright), Greek voice (the browser's speechSynthesis is replaced by a recorder), push to talk with someone 100 m
 // away while navigating (guidance waits until the talk ends), leaving the route → automatic new route, arrival, end.
 // Also: the provider key never reaches the browser; /api/nav refuses calls without a session.
-import fs from "node:fs";
+import { MAIN, REROUTE, along, dist } from "./route-helpers.mjs";
 import { base, done, hold, ok, open, S, seen, sql, sqlUntil, SUPABASE, USERS } from "./lib.mjs";
 
-const fx = (n) => JSON.parse(fs.readFileSync(new URL(`../../src/lib/nav/fixtures/${n}.json`, import.meta.url)));
-/** The recorded routes' shapes (Valhalla polyline6 → [lat, lng]). */
-function decode(str) {
-  const out = [];
-  let i = 0, lat = 0, lng = 0;
-  const next = () => {
-    let r = 0, sh = 0, b;
-    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20);
-    return r & 1 ? ~(r >> 1) : r >> 1;
-  };
-  while (i < str.length) { lat += next(); lng += next(); out.push([lat / 1e6, lng / 1e6]); }
-  return out;
-}
-const MAIN = decode(fx("valhalla-athens").trip.legs[0].shape);
-const REROUTE = decode(fx("valhalla-athens-reroute").trip.legs[0].shape);
-const m = (a, b) => Math.hypot((a[0] - b[0]) * 111_320, (a[1] - b[1]) * 111_320 * Math.cos((a[0] * Math.PI) / 180));
-/** Points every ~`step` m along a shape, from `fromM` to `toM` metres. */
-function along(shape, fromM, toM, step = 15) {
-  const out = [];
-  let d = 0;
-  for (let i = 1; i < shape.length; i++) {
-    const seg = m(shape[i - 1], shape[i]);
-    for (let x = 0; x < seg; x += step) {
-      const at = d + x;
-      if (at >= fromM && at <= toM) {
-        const k = x / seg;
-        out.push([shape[i - 1][0] + (shape[i][0] - shape[i - 1][0]) * k, shape[i - 1][1] + (shape[i][1] - shape[i - 1][1]) * k]);
-      }
-    }
-    d += seg;
-  }
-  return out;
-}
-
+const m = dist;
 const ME = USERS.me.id, GIO = USERS.giorgos.id;
 await fetch(`${SUPABASE}/routing/_reset`);
 const SYNTAGMA = [37.9755, 23.7348];

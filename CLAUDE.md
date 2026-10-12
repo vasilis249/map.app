@@ -59,7 +59,8 @@ profiles (username, full_name, bio, avatar_path, disabled) · follows (asymmetri
 notifications (follow | nearby | walkie; one row per actor+kind, moved to top) · reports (user | walkie | nearby) ·
 location_sharing (off | friends | everyone; talk_from everyone | following | nobody) · private.user_locations (latest
 only) · private.nearby_knocks / nearby_messages (+ private.nearby_audio, 24 h) · walkie_messages (+ private.walkie_audio,
-24 h) · walkie_contacts (channel on ≤ 10, seen_at) · private.walkie_diag · private.rate_events · storage bucket `avatars`.
+24 h) · walkie_contacts (channel on ≤ 10, seen_at) · private.walkie_diag · private.rate_events · storage bucket `avatars` ·
+private.road_reports / road_votes / road_strikes (P5) · user_locations.vehicle_at (P4: 3D cars).
 Realtime: private channels `walkie:<a>:<b>`, `nearby:<a>:<b>` (a < b) and inbox `nearby-in:<uid>` (read-only,
 written by `realtime.send` from `nearby_knock`), authorized by policies on `realtime.messages`.
 
@@ -164,6 +165,19 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
     smoothly; models 1.7× (cars) / 2.4× (pedestrians) life size to read on a phone. Their photo floats 42 px above.
     Server: `user_locations.vehicle_at` (last time > 5 m/s) → `map_people.in_vehicle` (≤ 5 min ago); others never get
     the speed itself. People refresh every 2 s while navigating (5 s otherwise).
+- D22 (P5) Road reports (Waze-style), `private.road_reports` behind RPCs only (`road_report`, `road_vote`,
+  `road_reports_in`, `admin_remove_road_report`): kinds accident / police / hazard / traffic / closed; expiry traffic
+  30 min, police + accident 1 h, hazard 2 h, closed 6 h; the same kind within 100 m while active = a confirmation (+1)
+  instead of a new report; +1 "still there" extends to ≥ half its time from now; down − up ≥ 2 removes it; one vote
+  each, changeable, never on your own. Anonymous (no author column returned), hidden between blocked people and for
+  disabled authors. Limits: 10 reports / 10 min + 40 / day, 60 votes / 10 min; boxes ≤ 2° × 2.5°. Abuse: report_content
+  ('road') → queue (admin sees the kind) → remove (resolution 'removed'). Privacy: a report is who + where + when, so
+  the row is deleted a day after it expires/is removed (cron `expire-road` every 15 min; kept while an abuse report is
+  open); a removed report leaves only a location-free strike (user, time; 7 days); 5 strikes in a week → no reporting.
+  Client: `src/lib/reports/road.ts` (pure: on route ≤ 50 m ahead in your direction, warning ~30 s ahead 300 m–1 km,
+  "still there?" within 40 m, once each, not for your own / voted), pins on the map (≤ 2 km, or the route's box while
+  navigating; 30 s refresh), a big orange report button → 5 big tiles (one tap, no typing), warning chip + voice
+  through the guidance queue (muted / waits for talks like guidance), "still there?" card with big 👍 / 👎 (10 s).
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
@@ -254,3 +268,18 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   the Valhalla part is the same engine as the recorded answers), real Greek voice on iOS (native plugin, silent switch,
   locked screen, background), guidance + walkie audio together on a device, background navigation, a real drive (speed /
   course from a moving phone; Playwright can't emulate them), battery / heat → `docs/DEVICE-TEST-P4.md`.
+
+### P5 — road reports (done in the browser, awaiting OK)
+- SQL: new suite road 29 (create, confirmation instead of duplicate, votes / change / own, extension, auto-removal +
+  strike without location, expiry + deletion, blocks, disabled authors, abuse → queue → admin removal, strikes limit,
+  rate limits, box size, anon refused, definer + search_path) → 192 PASS in all.
+- Unit tests 37 (+ 5 road: on route / off / behind / opposite direction, relevance, one warning in time, one
+  "still there?" when passing, not for own / voted).
+- Browser flow `reports` (17 checks, 3 phones): one-tap report at your position, own pin (no voting), warning chip +
+  voice once while navigating, "still there?" when passing → "no", a second "no" from someone nearby removes it for
+  everyone (+ strike), pins for a walker within 2 km, card without author, abuse report into the queue. Full suite
+  re-run with the P5 map changes: (pending — see the next commit).
+- Harness: `route-helpers.mjs` (recorded routes, drive points, voice recorder) shared by nav / reports flows; a locator
+  read inside a loop needs a short timeout (Playwright waits 30 s for a missing one).
+- Not verified: real drivers and many simultaneous users, reports on a real moving phone (speed / course from GPS),
+  the right warning distance on highways in practice; push notifications for reports (none: only in the app).
