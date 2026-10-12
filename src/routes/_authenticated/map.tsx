@@ -2,11 +2,16 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Users } from "lucide-react";
+import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Search, Users } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { GhostButton } from "@/components/location/ghost-button";
 import { LiveMap, type MapFocus } from "@/components/map/live-map";
 import { NearbyTalk } from "@/components/map/nearby-talk";
+import { NavBanner, NavFooter, RoutePreview } from "@/components/nav/nav-ui";
+import { NavSearch } from "@/components/nav/nav-search";
+import { spokenDistance } from "@/lib/nav/format";
+import type { Place } from "@/lib/nav/route";
+import { chooseRoute, planTo, useNav, type NavTexts } from "@/lib/nav/session";
 import { FollowButton } from "@/components/friends/follow-button";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { useHubPeers } from "@/components/walkie/walkie-hub";
@@ -113,6 +118,18 @@ function MapPage() {
     .map((p) => p.peer);
   const local = useLocalFix();
   const compass = useCompass();
+  // Navigation (P4): planning a trip (search → route choices) or following one.
+  const nav = useNav();
+  const [searching, setSearching] = useState(false);
+  const navActive = nav.phase === "navigating" || nav.phase === "arrived";
+  const planning = nav.phase === "loading" || nav.phase === "preview";
+  const plain = !navActive && !planning;
+  const navTexts: NavTexts = {
+    phrase: (m, instruction) => t("nav.say.inDistance", { distance: spokenDistance(m, t, i18n.language), instruction }),
+    rerouted: t("nav.say.rerouted"),
+    bgTitle: t("nav.bgTitle"),
+    bgMessage: t("nav.bgMessage", { place: nav.dest?.name ?? "" }),
+  };
 
   const s = sharing.data;
   // You: this phone's live position, else the last one you shared.
@@ -129,7 +146,11 @@ function MapPage() {
   const list = people.data ?? [];
   const friends = list.filter((p) => p.is_friend).sort((a, b) => distOf(a) - distOf(b));
   const nearby = list.filter((p) => p.distance_m <= radius);
-  const shown = view === "friends" ? friends : nearby;
+  // While navigating: everyone within 200 m (friends included), so you can still talk to them.
+  const shown = navActive ? list.filter((p) => p.distance_m <= NEAR_M) : view === "friends" ? friends : nearby;
+  const planFrom = (dest: Place) => {
+    if (me) void planTo(dest, me, i18n.language);
+  };
 
   const select = (p: MapPerson | null) => {
     void navigate({ search: p ? { u: p.user_id } : {}, replace: true });
@@ -157,25 +178,61 @@ function MapPage() {
     setView("nearby");
     setRadius(NEAR_M);
   }, [u, currentIsFriend]);
+  useEffect(() => {
+    if (navActive) setRadius(NEAR_M);
+  }, [navActive]);
 
   return (
     <div className="fixed inset-0 z-0 bg-background">
       <LiveMap
         me={me}
         meFace={{ name: profile.data?.full_name || profile.data?.username || "", path: profile.data?.avatar_path ?? null }}
-        radius={view === "nearby" ? radius : null}
+        radius={view === "nearby" && plain ? radius : null}
         people={shown}
         onSelect={select}
         focus={focus}
         talking={talking}
-        heading={heading}
+        heading={navActive ? (nav.fix?.course ?? nav.progress?.routeBearing ?? heading) : heading}
         ageOf={ageOf}
         lang={i18n.language}
+        nav={
+          navActive && nav.route && nav.dest
+            ? { lines: [nav.route.route.points], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null }
+            : planning && nav.dest
+              ? { lines: nav.routes.map((r) => r.points), chosen: nav.chosen, dest: nav.dest, mode: "preview", bearing: null, onChoose: chooseRoute }
+              : null
+        }
       />
 
-      {/* top: friends | nearby (+ radius) */}
+      {searching && (
+        <NavSearch
+          near={me}
+          onClose={() => setSearching(false)}
+          onPick={(p) => {
+            setSearching(false);
+            planFrom(p);
+          }}
+        />
+      )}
+
+      {/* top: the next maneuver while navigating; else "where to?" and friends | nearby (+ radius) */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col items-center gap-2 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">
-        <div className="pointer-events-auto flex items-center gap-1 rounded-full glass border border-border/60 shadow-float p-1" role="tablist">
+        {navActive && (
+          <div className="pointer-events-auto w-full max-w-md">
+            <NavBanner nav={nav} />
+          </div>
+        )}
+        {plain && (
+          <button
+            type="button"
+            onClick={() => setSearching(true)}
+            disabled={!me}
+            className="pointer-events-auto flex h-12 w-full max-w-md items-center gap-3 rounded-full glass border border-border/60 px-5 text-left text-callout font-semibold text-muted-foreground shadow-float disabled:opacity-60"
+          >
+            <Search className="h-5 w-5 text-link" /> {t("nav.whereTo")}
+          </button>
+        )}
+        <div className={cn("pointer-events-auto flex items-center gap-1 rounded-full glass border border-border/60 shadow-float p-1", !plain && "hidden")} role="tablist">
           {(["friends", "nearby"] as const).map((v) => (
             <button
               key={v}
@@ -189,7 +246,7 @@ function MapPage() {
             </button>
           ))}
         </div>
-        {view === "nearby" && (
+        {view === "nearby" && plain && (
           <div className="pointer-events-auto flex items-center gap-1 rounded-full glass border border-border/60 shadow-float p-1">
             {RADII.map((r) => (
               <button
@@ -230,7 +287,10 @@ function MapPage() {
           )}
         </div>
 
-        {on && view === "friends" && (
+        {navActive && <NavFooter nav={nav} />}
+        {planning && <RoutePreview nav={nav} texts={navTexts} />}
+
+        {on && view === "friends" && plain && (
           <div className="max-w-full self-start rounded-3xl glass border border-border/60 shadow-float p-3">
             {friends.length ? (
               <ul className="flex gap-3 overflow-x-auto px-0.5 py-1" aria-label={t("map.friendsTab")}>
@@ -254,7 +314,7 @@ function MapPage() {
           </div>
         )}
 
-        {on && view === "nearby" && (
+        {on && view === "nearby" && plain && (
           <button
             type="button"
             onClick={() => setListOpen(true)}
@@ -278,7 +338,7 @@ function MapPage() {
         )}
 
         {/* sharing off, or no position yet */}
-        {s && !on && (
+        {s && !on && plain && (
           <div className="rounded-3xl glass border border-border/60 shadow-float p-5">
             <p className="flex items-center gap-2 text-body font-semibold">
               <MapPin className="h-5 w-5 text-link" /> {t("map.offTitle")}
@@ -392,14 +452,29 @@ function MapPage() {
                   >
                     <RadioTower className="h-5 w-5" /> {t("walkie.title")}
                   </Link>
-                  <a
-                    href={directionsUrl(current.lat, current.lng)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex h-12 items-center justify-center gap-2 rounded-full bg-secondary font-semibold"
-                  >
-                    <Navigation className="h-5 w-5" /> {t("map.directions")}
-                  </a>
+                  {me ? (
+                    // In-app navigation to where your friend is now.
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const to = { id: `user:${current.user_id}`, name: current.full_name || current.username, detail: "", lat: current.lat, lng: current.lng };
+                        select(null);
+                        planFrom(to);
+                      }}
+                      className="flex h-12 items-center justify-center gap-2 rounded-full bg-secondary font-semibold"
+                    >
+                      <Navigation className="h-5 w-5" /> {t("map.directions")}
+                    </button>
+                  ) : (
+                    <a
+                      href={directionsUrl(current.lat, current.lng)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex h-12 items-center justify-center gap-2 rounded-full bg-secondary font-semibold"
+                    >
+                      <Navigation className="h-5 w-5" /> {t("map.directions")}
+                    </a>
+                  )}
                 </div>
               ) : (
                 on && (

@@ -48,6 +48,31 @@ export interface LivePosition {
   live?: boolean;
 }
 
+/** Navigation on the map (P4): the route(s), the destination, and how the camera behaves. */
+export interface MapNav {
+  /** Routes as [lng, lat] lines; `chosen` is drawn on top, the others are tappable alternatives. */
+  lines: [number, number][][];
+  chosen: number;
+  dest: { lat: number; lng: number };
+  /** preview: frame the routes once; follow: heading-up, tilted camera that follows you (until you move the map). */
+  mode: "preview" | "follow";
+  /** Direction to face in follow mode (your course, else the route's). */
+  bearing: number | null;
+  onChoose?: (i: number) => void;
+}
+
+const NAV_ZOOM = 17;
+const NAV_PITCH = 50;
+
+function flagElement(): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("aria-label", "destination");
+  el.className = "grid h-10 w-10 place-items-center rounded-full border-[3px] border-white bg-destructive text-white shadow-float";
+  el.innerHTML =
+    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg>';
+  return el;
+}
+
 /** Where to move the camera: yourself, your radius, or a point (a friend). Change `key` to move again. */
 export interface MapFocus {
   key: number;
@@ -161,6 +186,7 @@ export function LiveMap({
   heading,
   ageOf,
   lang,
+  nav = null,
 }: {
   me: LivePosition | null;
   meFace: { name: string; path: string | null };
@@ -177,6 +203,8 @@ export function LiveMap({
   ageOf: (p: MapPerson) => string | null;
   /** App language, for place names. */
   lang: string;
+  /** Navigation (route lines, destination, follow camera), or null. */
+  nav?: MapNav | null;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -189,8 +217,12 @@ export function LiveMap({
   const placed = useRef<"none" | "stored" | "live">("none");
   const userMoved = useRef(false);
   const schemeOff = useRef<(() => void) | null>(null);
-  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang });
-  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang };
+  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang, nav });
+  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang, nav };
+  const destMarker = useRef<Marker | null>(null);
+  // Follow mode paused because you moved the map yourself (the recenter button resumes it).
+  const navFree = useRef(false);
+  const framedKey = useRef<string | null>(null);
 
   // Create the map once.
   useEffect(() => {
@@ -216,6 +248,21 @@ export function LiveMap({
       };
       m.on("dragstart", byUser);
       m.on("zoomstart", byUser);
+      m.on("dragstart", (e: { originalEvent?: unknown }) => {
+        if (e.originalEvent && latest.current.nav?.mode === "follow") navFree.current = true;
+      });
+      m.on("rotate", () => pointBeam());
+      // The camera's state, for tests and debugging (heading-up while navigating).
+      m.on("moveend", () => {
+        if (!box.current) return;
+        box.current.dataset.bearing = String(Math.round(m.getBearing()));
+        box.current.dataset.pitch = String(Math.round(m.getPitch()));
+      });
+      // Tap an alternative route to choose it.
+      m.on("click", "nav-alt", (e) => {
+        const idx = e.features?.[0]?.properties?.idx;
+        if (typeof idx === "number") latest.current.nav?.onChoose?.(idx);
+      });
       // Our layers go on top of whichever style is loaded (the first one, and again after a Light / Dark switch).
       m.on("style.load", () => {
         styleReady.current = true;
@@ -231,7 +278,15 @@ export function LiveMap({
         m.addSource("me-acc", { type: "geojson", data: empty });
         m.addLayer({ id: "me-acc-fill", type: "fill", source: "me-acc", paint: { "fill-color": blue, "fill-opacity": 0.12 } });
         m.addLayer({ id: "me-acc-line", type: "line", source: "me-acc", paint: { "line-color": blue, "line-width": 1, "line-opacity": 0.4 } });
+        // Routes under the street names (labels stay readable), above the streets.
+        const labels = m.getStyle().layers.find((l) => l.type === "symbol")?.id;
+        m.addSource("nav", { type: "geojson", data: empty });
+        const line = { "line-join": "round", "line-cap": "round" } as const;
+        m.addLayer({ id: "nav-alt", type: "line", source: "nav", filter: ["==", ["get", "chosen"], false], layout: line, paint: { "line-color": "#7f9cc9", "line-width": 7, "line-opacity": 0.9 } }, labels);
+        m.addLayer({ id: "nav-casing", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#0a4fa8", "line-width": 11 } }, labels);
+        m.addLayer({ id: "nav-line", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#1a73e8", "line-width": 7 } }, labels);
         drawAreas();
+        drawNav();
       });
       const media = darkMedia();
       const onScheme = () => {
@@ -250,6 +305,8 @@ export function LiveMap({
       map.current = null;
       all.clear();
       meMarker.current = null;
+      destMarker.current = null;
+      framedKey.current = null;
       styleReady.current = false;
       placed.current = "none";
       userMoved.current = false;
@@ -277,6 +334,75 @@ export function LiveMap({
         .filter((p) => p.accuracy_m != null && p.accuracy_m > 20)
         .map((p) => poly(circle(p, Math.min(p.accuracy_m!, 5000), 36), { color: p.is_friend ? token("--success", "#34c759") : token("--muted-foreground", "#6e6e73") })),
     );
+  }
+
+  function drawNav() {
+    const m = map.current;
+    const ml = lib.current;
+    if (!m || !ml) return;
+    const n = latest.current.nav;
+    if (styleReady.current)
+      (m.getSource("nav") as { setData: (d: unknown) => void } | undefined)?.setData({
+        type: "FeatureCollection",
+        features: (n?.lines ?? []).map((coords, idx) => ({
+          type: "Feature",
+          properties: { idx, chosen: idx === n!.chosen },
+          geometry: { type: "LineString", coordinates: coords },
+        })),
+      });
+    if (n) {
+      if (!destMarker.current) destMarker.current = new ml.Marker({ element: flagElement(), anchor: "center" }).setLngLat([n.dest.lng, n.dest.lat]).addTo(m);
+      else destMarker.current.setLngLat([n.dest.lng, n.dest.lat]);
+    } else {
+      destMarker.current?.remove();
+      destMarker.current = null;
+    }
+    navCamera();
+  }
+
+  /** Preview: frame all routes once. Follow: you, low on the screen, facing your way, tilted. Off: flat again. */
+  function navCamera() {
+    const m = map.current;
+    const n = latest.current.nav;
+    const pos = latest.current.me;
+    if (!m) return;
+    if (!n) {
+      if (framedKey.current) {
+        framedKey.current = null;
+        navFree.current = false;
+        m.easeTo({ pitch: 0, bearing: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });
+      }
+      return;
+    }
+    if (n.mode === "preview") {
+      const key = `p:${n.lines.length}:${n.dest.lat},${n.dest.lng}`;
+      if (framedKey.current === key || !n.lines.length) return;
+      framedKey.current = key;
+      const all = n.lines.flat();
+      if (pos) all.push([pos.lng, pos.lat]);
+      const lngs = all.map((c) => c[0]);
+      const lats = all.map((c) => c[1]);
+      const cam = m.cameraForBounds([Math.min(...lngs), Math.min(...lats), Math.max(...lngs), Math.max(...lats)], {
+        // (the route choices card, the map buttons and the tab bar cover the lower half)
+        padding: { top: 70, bottom: m.getContainer().clientHeight * 0.55, left: 40, right: 40 },
+      });
+      if (cam) m.jumpTo({ ...cam, pitch: 0, bearing: 0 });
+      return;
+    }
+    framedKey.current = "follow";
+    if (navFree.current || !pos) return;
+    const h = m.getContainer().clientHeight;
+    m.easeTo({
+      center: [pos.lng, pos.lat],
+      zoom: NAV_ZOOM,
+      pitch: NAV_PITCH,
+      bearing: n.bearing ?? m.getBearing(),
+      // You sit a little below the middle of what's visible between the banner (top) and the controls (bottom),
+      // so more of the road ahead shows.
+      padding: { top: h * 0.3, bottom: h * 0.2, left: 0, right: 0 },
+      duration: 900,
+      essential: true,
+    });
   }
 
   function frameRadius(animate: boolean) {
@@ -339,6 +465,7 @@ export function LiveMap({
       }
     }
     drawAreas();
+    navCamera();
   }
 
   // Language switched while the map is open.
@@ -348,6 +475,8 @@ export function LiveMap({
 
   const talkingKey = talking.join();
   useEffect(sync, [me?.lat, me?.lng, me?.accuracy, me?.live, meFace.name, meFace.path, people, radius, talkingKey]);
+  const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
+  useEffect(drawNav, [navKey]);
 
   // The beam on your marker follows the compass (or your course).
   const headingRef = useRef(heading);
@@ -357,7 +486,8 @@ export function LiveMap({
     if (!b) return;
     const h = headingRef.current;
     b.classList.toggle("hidden", h == null);
-    if (h != null) b.style.transform = `translate(-50%, -50%) rotate(${h}deg)`;
+    // The beam points on the screen: subtract the map's own rotation (heading-up while navigating).
+    if (h != null) b.style.transform = `translate(-50%, -50%) rotate(${h - (map.current?.getBearing() ?? 0)}deg)`;
   }
   useEffect(pointBeam, [heading]);
 
@@ -367,6 +497,11 @@ export function LiveMap({
     if (!focus || !m) return;
     const t = focus.target;
     if (t === "radius") return frameRadius(true);
+    // While following you on a route, "me" resumes the follow camera.
+    if (t === "me" && latest.current.nav?.mode === "follow") {
+      navFree.current = false;
+      return navCamera();
+    }
     const pos = t === "me" ? latest.current.me : t;
     if (!pos) return;
     m.flyTo({ center: [pos.lng, pos.lat], zoom: Math.max(m.getZoom(), ME_ZOOM), duration: 900 });

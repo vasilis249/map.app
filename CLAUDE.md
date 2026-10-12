@@ -43,6 +43,15 @@ npm run ios:sync            # patch native plugins + cap sync ios (then open ios
   capacitor-swift-pm 8 and adds the iOS 14 temporary-full-accuracy request (purpose key `PreciseMap`).
 - **Map**: MapLibre GL 6.11.2 (pinned, kit) + OpenFreeMap liberty/dark (no key). Worker bundled via
   `?worker&url` + `worker.format: "es"` (LESSONS #19).
+- **Navigation (P4)**: `src/lib/nav/` — pure core (geo, polyline, `route.ts` provider-neutral NavRoute / Place +
+  Valhalla / Pelias parsers, `progress.ts` snapping + off-route, `guidance.ts` what to say when, `speech-queue.ts`
+  guidance vs push-to-talk, `navigator.ts` one trip) unit-tested on recorded Valhalla answers (`fixtures/`) with
+  simulated drives (`testing/sim.ts`). Server: `api.server.ts` (POST `/api/nav/route|search`, routed in
+  `src/server.ts`) → `nav_quota` RPC with the caller's JWT → edge cache → `provider.server.ts` (the ONLY file that
+  knows the provider: Stadia Maps; key = Worker secret ROUTING_API_KEY, optional ROUTING_BASE_URL). Client: `api.ts`,
+  `session.ts` (the trip, outside any screen), `nav-location.ts` (native background watcher while navigating),
+  `speech.ts` (native TTS plugin / Web Speech), `wake-lock.ts` (KeepAwake plugin / Screen Wake Lock). UI:
+  `src/components/nav/` + the map screen (`nav` prop of LiveMap: route lines, destination flag, heading-up camera).
 
 ### Data model (baseline)
 profiles (username, full_name, bio, avatar_path, disabled) · follows (asymmetric; mutual = friends) · blocks (trigger
@@ -68,6 +77,8 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - `tests/e2e/`: `local-supabase.mjs` (:54321) = PostgREST proxy + mini GoTrue (email+password via the LOCAL-ONLY
   `local_auth.sql`, HS256 JWTs with the dev secret) + Storage emulation (multipart uploads, RLS through PostgREST) +
   Realtime mock (`realtime-mock.mjs`, Phoenix vsn 2.0.0, private joins authorized by the real policies via `rt_mock.sql`).
+  + routing provider mock under `/routing` (`routing-mock.mjs`: recorded Valhalla answers, Pelias-shaped places, call log
+  at `/routing/_log`; the preview Worker gets ROUTING_BASE_URL / ROUTING_API_KEY via `.dev.vars`).
   `seed.sql`: 5 users (password `test-pass-1`), me↔nikos friends. Flows print PASS/FAIL; `run.sh` resets per flow.
 - Playwright: `/opt/node22/lib/node_modules/playwright`, Chromium `/opt/pw-browsers/chromium-1194/...`.
   Use `waitFor` (not `isVisible({timeout})`, which never waits).
@@ -104,6 +115,31 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - D15 (P3) Report one saved transmission (flag on the other person's history rows) → `report_content('walkie'|'nearby')`.
   The Walkie tab shows the unheard count. The map's bottom controls pass taps through their empty space (markers
   underneath stay tappable).
+- D16 (P4) Navigation endpoints are plain Worker routes (`/api/nav/*`, POST so trip coordinates and search text stay
+  out of URLs/logs), not TanStack server functions: explicit validation, same origin inside the app. Session + limits
+  by `public.nav_quota(kind)` (route 60 / 10 min + 500 / day; search 150 / 10 min + 1500 / day). Edge cache (no user
+  in the key; versioned): routes 5 min on a ≈ 10 m / 30° grid, search 1 day on a ≈ 1 km grid. Errors: no_route,
+  too_far (> 1500 km), rate_limited, unavailable, not_allowed. Deploy guard also refuses ROUTING_API_KEY in dist/ and
+  any VITE_* secret-looking variable.
+- D17 (P4) Guidance: "far" ("Σε 400 μέτρα, …", ≈ 30 s ahead, 300–1500 m, only on stretches longer than near + 80 m),
+  "near" (Valhalla's pre-transition text, ≈ 8 s ahead, 50–300 m), "post" ("Συνεχίστε για …") when the next turn is
+  far; a turn already named as "Στη συνέχεια …" from within near distance isn't repeated. Talk vs guidance: while
+  anyone talks (you on air / mic opening, or a voice arriving) guidance waits; a sentence interrupted by a talk is said
+  again after it; only the newest waiting sentence is kept; one about a turn already passed or an old route is dropped
+  (the banner shows it anyway). Voice: native text-to-speech plugin (own audio session — never touches the web view's,
+  LESSONS #1), Web Speech in browsers; mute remembered on the device.
+- D18 (P4) Off route: further than 30 m + the fix's error (≤ 60 m), or driving the wrong way (> 135° at > 4 m/s),
+  for 3 fixes over ≥ 4 s; fixes worse than ±100 m are ignored. Reroute at most every 10 s (a failed one retried after
+  that), from where you are with your course as heading, no alternatives. The route starts on the nearest road: until
+  you first reach it you join at its start (a later stretch of a looping route close to you doesn't count), and you're
+  "off" only when clearly further from the whole route than at the start (+ 100 m).
+- D19 (P4) Navigation lives on the map screen; the trip is kept outside screens (switching to the Walkie tab doesn't
+  stop guidance). While navigating the map shows everyone within 200 m (tap → card → push to talk) instead of the
+  friends / nearby views. Destination search is disabled while driving (> 18 km/h). A friend's card "Οδηγίες" plans an
+  in-app route to them. A separate native location watcher with a background message runs only while navigating; its
+  positions are not uploaded (only the route requests' start + destination go to our Worker and the provider).
+  Additive kit changes (owner informed): `tracker.ts` exports `BackgroundGeolocation`; `live-map.tsx` gained the `nav`
+  prop, the beam compensates the map's rotation, `data-bearing` / `data-pitch` on the map box.
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
@@ -162,3 +198,24 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Not verified: real Supabase Realtime, real iPhones (silent switch, locked screen, background), driving mode with a
   real moving phone (Playwright can't emulate speed) → `docs/DEVICE-TEST-P3.md`.
 
+### P4 — navigation (done in the browser; real-iPhone drive + Stadia key pending, awaiting OK)
+- Unit tests 26 (vitest, src/lib/nav/nav.test.ts) on two recorded Valhalla answers (FOSSGIS demo, el-GR):
+  parsing (main + alternate, Greek texts, metres/seconds, malformed / error answers, capped strings), simulated drives
+  with noise at 50 km/h and walking speed (each maneuver announced once and in time, order, ETA monotonic, arrival),
+  noise ≠ detour (wild fix, ±150 m fix, red light), leaving the route (debounce, one reroute, retry after a failure),
+  the recorded reroute followed to the end, wrong way, starting 60 m off the road, speech queue vs talk.
+- SQL: new suite nav 11 (quota per person / kind / window / day, anon refused, age gate, disabled) → 159 PASS.
+- Browser flow `nav` (33 checks, provider mock serving the recorded answers): search, two route choices, start,
+  depart sentence, wake lock, ETA, heading-up tilted camera, turns announced in order, banner + distance, someone
+  within 200 m tapped and talked to while navigating with guidance waiting for the talk, off route → one new route →
+  "Νέα διαδρομή." → followed, arrival, end (flat camera, wake lock released); the provider key only server-side,
+  /api/nav 401 without a session, per-person counters. Also checked by curl against the built Worker: validation,
+  edge cache hit, bundle guard with the key planted.
+- Real bugs found by the tests and fixed: the depart repeated the first turn a second later; a looping route made the
+  first fix snap 400 m ahead (wrong "Σε 300 μέτρα…" at the start); a standing phone never started guidance (no new fix
+  → seeded with the last one); "02:32 μ.μ." arrival → 24-hour; you sat behind the bottom controls in follow mode;
+  the banner said "ΕΟ54" instead of "Βασιλίσσης Σοφίας" (turned-onto street, name before road number).
+- Not verified: Stadia Maps itself (no key yet: its Pelias autocomplete format is written from the docs, not recorded;
+  the Valhalla part is the same engine as the recorded answers), real Greek voice on iOS (native plugin, silent switch,
+  locked screen, background), guidance + walkie audio together on a device, background navigation, a real drive (speed /
+  course from a moving phone; Playwright can't emulate them), battery / heat → `docs/DEVICE-TEST-P4.md`.

@@ -16,6 +16,8 @@ const MAX_BODY = 4_096;
 /** The longest trip we route (a straight line; Greece end to end is ≈ 1 000 km). */
 const MAX_TRIP_M = 1_500_000;
 const ROUTE_TTL_S = 300;
+/** Part of every cache key: bump it when the shape of NavRoute / Place (route.ts) changes. */
+const CACHE_VERSION = 1;
 const SEARCH_TTL_S = 86_400;
 
 function point(v: unknown): LatLng | null {
@@ -61,7 +63,7 @@ function edgeCache(): Cache | null {
 }
 async function cached(key: string, ttl: number, make: () => Promise<unknown>): Promise<Response> {
   const cache = edgeCache();
-  const req = new Request(`https://nav-cache.invalid/${key}`);
+  const req = new Request(`https://nav-cache.invalid/v${CACHE_VERSION}/${key}`);
   const hit = await cache?.match(req).catch(() => undefined);
   if (hit) return json(200, await hit.json(), { "x-nav-cache": "hit" });
   const body = await make();

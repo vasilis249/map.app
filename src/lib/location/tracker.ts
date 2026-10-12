@@ -36,7 +36,8 @@ interface BackgroundGeolocationPlugin {
   removeWatcher(options: { id: string }): Promise<void>;
   openSettings(): Promise<void>;
 }
-const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
+/** Exported (additive, P4) for navigation's own background watcher (src/lib/nav/nav-location.ts). */
+export const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
 
 /**
  * The app's native location plugin is there. An iPhone app built before the plugin was added (the web part updates

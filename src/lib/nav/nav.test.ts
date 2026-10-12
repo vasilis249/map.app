@@ -57,6 +57,9 @@ describe("Valhalla response", () => {
     expect(m[1].pre).toBe("Στρίψτε αριστερά στη Βασιλίσσης Αμαλίας, ΕΟ91.");
     expect(m[1].post).toBe("Συνεχίστε για 100 μέτρα.");
     expect(m[1].street).toBe("Βασιλίσσης Αμαλίας");
+    // The street you turn onto, and its name rather than its road number.
+    expect(m[3].street).toBe("Πλατεία Συντάγματος");
+    expect(parseValhalla(reroute)[0].maneuvers[1].street).toBe("Βασιλίσσης Σοφίας");
     for (let k = 1; k < m.length; k++) expect(m[k].begin).toBeGreaterThan(m[k - 1].begin);
     expect(m.at(-1)!.begin).toBe(main.points.length - 1);
   });
@@ -286,6 +289,29 @@ describe("a simulated drive along the real route", () => {
     expect(said[0].u).toEqual({ key: "rerouted", text: "Νέα διαδρομή." });
     expect(reroutes).toBe(0);
     expect(last.progress.arrived).toBe(true);
+  });
+
+  it("starting off the road (the route begins on the nearest street, ≈ 60 m away): no reroute until you reach it", () => {
+    const nav = createNavigator(main, navOpts);
+    // Recorded request point (Syntagma) → the route's first point, then along the route.
+    const origin = { lat: 37.9755, lng: 23.7348 };
+    const fixes: NavFix[] = [];
+    for (let i = 0; i < 20; i++) fixes.push({ ...origin, accuracy: 10, speed: 0, course: null, t: i * 1000 }); // waiting 20 s
+    const toRoad = haversine(origin, r.pts[0]);
+    fixes.push({ lat: 37.97535, lng: 23.73425, accuracy: 8, t: fixes.at(-1)!.t + 1000 }); // (as in the browser flow)
+    for (let d = 5; d < toRoad; d += 5) fixes.push({ ...offset(origin, d, bearing(origin, r.pts[0])), accuracy: 10, speed: 5, course: null, t: fixes.at(-1)!.t + 1000 });
+    fixes.push(...drive(r, { speed: 10, to: 600, t0: fixes.at(-1)!.t + 1000 }));
+    const { reroutes, last, said } = run(nav, fixes);
+    expect(reroutes).toBe(0);
+    expect(last.progress.along).toBeGreaterThan(550);
+    // The route loops round Syntagma square and passes ≈ 30 m from that start point again 400 m later: the first
+    // fixes must not be taken for that later stretch (it once said "In 300 m, turn onto Filellinon" first).
+    const order = said.map((s) => (s.u.key === "start" ? 0 : parseInt(s.u.key)));
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    // …but going away from it (north-east: the route lies south-west of Syntagma) is a reason to ask again.
+    const nav2 = createNavigator(main, navOpts);
+    const away = straight(origin, 45, 10, 20, 0);
+    expect(run(nav2, [{ ...origin, accuracy: 10, t: -1000 }, ...away]).reroutes).toBe(1);
   });
 
   it("driving the wrong way along the route counts as leaving it", () => {

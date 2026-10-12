@@ -84,6 +84,9 @@ const KINDS: Record<number, ManeuverKind> = {
   28: "ferry", 29: "ferry",
 };
 
+/** "ΕΟ54", "A1", "E75": a road number, not a street name. */
+const ROAD_NUMBER = /^(ΕΟ|EO|Α|A|Ε|E)\s?\d+$/;
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown, max = 300): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
@@ -117,14 +120,20 @@ function parseTrip(trip: unknown): NavRoute {
       // An intermediate leg's "destination" is just a waypoint: keep only the trip's last arrival.
       if (kind === "arrive" && maneuvers.length && leg !== (t.legs as unknown[]).at(-1)) continue;
       if (kind === "depart" && maneuvers.length) continue;
-      const names = Array.isArray(mm.street_names) ? (mm.street_names as unknown[]).map((s) => str(s, 80)).filter(Boolean) : [];
+      // The street you turn onto (begin_street_names) before the one you continue on; a name before a road number
+      // ("Βασιλίσσης Σοφίας", not "ΕΟ54").
+      const names = [mm.begin_street_names, mm.street_names]
+        .flatMap((l) => (Array.isArray(l) ? l : []))
+        .map((n) => str(n, 80))
+        .filter((n): n is string => !!n);
+      const street = names.find((n) => !ROAD_NUMBER.test(n)) ?? names[0] ?? null;
       maneuvers.push({
         kind,
         instruction: instruction!,
         alert: str(mm.verbal_transition_alert_instruction),
         pre: str(mm.verbal_pre_transition_instruction),
         post: str(mm.verbal_post_transition_instruction),
-        street: (names[0] as string | undefined) ?? null,
+        street,
         begin: base + begin!,
         length_m: Math.max(0, (num(mm.length) ?? 0) * unit),
         time_s: Math.max(0, num(mm.time) ?? 0),
