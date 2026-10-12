@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
-import type { ExpressionSpecification, Map as MlMap, Marker } from "maplibre-gl";
+import type { ExpressionSpecification, Map as MlMap, Marker, StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 // MapLibre 6 draws the map (streets, buildings, labels) in a web worker it loads from a file next to its own script,
 // which the app bundle doesn't have: without this the map shows no streets at all. Bundle the worker ourselves.
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { avatarUrl } from "@/lib/avatar";
+import { themeStyle } from "./map-theme";
 import type { MapPerson } from "@/lib/location/api";
 
 /**
@@ -15,10 +16,21 @@ import type { MapPerson } from "@/lib/location/api";
  * Optional radius circle (the "Κοντά μου" view). MapLibre is loaded on demand; markers are plain DOM elements.
  */
 
-/** Street map that follows the iPhone's Light / Dark setting (DESIGN.md: liberty by day, dark at night). */
-const STYLES = { light: "https://tiles.openfreemap.org/styles/liberty", dark: "https://tiles.openfreemap.org/styles/dark" };
+/**
+ * Street map that follows the iPhone's Light / Dark setting: OpenFreeMap's "liberty" recoloured after Apple Maps
+ * (map-theme.ts) in both schemes. If the style can't be fetched for the recolouring, MapLibre loads the plain one.
+ */
+const LIBERTY = "https://tiles.openfreemap.org/styles/liberty";
 const darkMedia = () => (typeof window === "undefined" ? null : window.matchMedia("(prefers-color-scheme: dark)"));
-const styleUrl = () => (darkMedia()?.matches ? STYLES.dark : STYLES.light);
+let libertyJson: Promise<StyleSpecification | null> | null = null;
+async function mapStyle(): Promise<StyleSpecification | string> {
+  libertyJson ??= fetch(LIBERTY)
+    .then((r) => (r.ok ? (r.json() as Promise<StyleSpecification>) : null))
+    .catch(() => null);
+  const base = await libertyJson;
+  if (!base) libertyJson = null; // try again next time
+  return base ? themeStyle(base, !!darkMedia()?.matches) : LIBERTY;
+}
 /** A colour token from design-system.css (the map's own layers can't read CSS variables). */
 const token = (name: string, fallback: string) =>
   (typeof document === "undefined" ? "" : getComputedStyle(document.documentElement).getPropertyValue(name).trim()) || fallback;
@@ -157,6 +169,24 @@ function personElement(p: MapPerson, talking: boolean, age: string | null, onSel
   return wrap;
 }
 
+/**
+ * You while navigating: the navigation arrow (like Apple / Google Maps) — a blue chevron with a white edge and a soft
+ * shadow, lying flat on the tilted map and turned to your direction of travel.
+ */
+function puckElement(): HTMLElement {
+  const el = document.createElement("div");
+  el.setAttribute("aria-label", "me");
+  el.dataset.puck = "1";
+  el.className = "pointer-events-none h-14 w-14";
+  el.style.filter = "drop-shadow(0 3px 4px rgba(0,0,0,0.35))";
+  el.innerHTML =
+    '<svg viewBox="0 0 56 56" width="56" height="56" aria-hidden="true">' +
+    '<defs><linearGradient id="puck-g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4aa3ff"/><stop offset="1" stop-color="#0a66f0"/></linearGradient></defs>' +
+    '<path d="M28 5 L47 48 L28 38.5 L9 48 Z" fill="url(#puck-g)" stroke="#fff" stroke-width="4" stroke-linejoin="round"/>' +
+    "</svg>";
+  return el;
+}
+
 /** You: photo in a blue ring with a soft ping, and a direction beam (hidden until a heading is known). */
 function meElement(name: string, path: string | null): { el: HTMLElement; beam: HTMLElement } {
   const wrap = document.createElement("div");
@@ -210,7 +240,7 @@ export function LiveMap({
   const map = useRef<MlMap | null>(null);
   const lib = useRef<typeof import("maplibre-gl") | null>(null);
   const markers = useRef(new Map<string, { marker: Marker; sig: string }>());
-  const meMarker = useRef<{ marker: Marker; sig: string; beam: HTMLElement } | null>(null);
+  const meMarker = useRef<{ marker: Marker; sig: string; beam: HTMLElement | null } | null>(null);
   const styleReady = useRef(false);
   // Where the camera was first put: on your stored position, then again on your live one when it arrives (unless you
   // already moved the map yourself).
@@ -228,14 +258,14 @@ export function LiveMap({
   useEffect(() => {
     let cancelled = false;
     const all = markers.current;
-    void import("maplibre-gl").then((ml) => {
+    void Promise.all([import("maplibre-gl"), mapStyle()]).then(([ml, style]) => {
       if (cancelled || !box.current) return;
       if (ml.getWorkerUrl() !== maplibreWorkerUrl) ml.setWorkerUrl(maplibreWorkerUrl);
       lib.current = ml;
       const start = latest.current.me;
       const m = new ml.Map({
         container: box.current,
-        style: styleUrl(),
+        style,
         center: start ? [start.lng, start.lat] : ATHENS,
         zoom: start ? ME_ZOOM : 11,
         attributionControl: { compact: true },
@@ -278,20 +308,25 @@ export function LiveMap({
         m.addSource("me-acc", { type: "geojson", data: empty });
         m.addLayer({ id: "me-acc-fill", type: "fill", source: "me-acc", paint: { "fill-color": blue, "fill-opacity": 0.12 } });
         m.addLayer({ id: "me-acc-line", type: "line", source: "me-acc", paint: { "line-color": blue, "line-width": 1, "line-opacity": 0.4 } });
-        // Routes under the street names (labels stay readable), above the streets.
-        const labels = m.getStyle().layers.find((l) => l.type === "symbol")?.id;
+        // Routes above every street, bridge and building, under the names (labels stay readable).
+        const layers = m.getStyle().layers;
+        const lastShape = layers.reduce((at, l, i) => (l.type === "symbol" ? at : i), -1);
+        const labels = layers.slice(lastShape + 1).find((l) => l.type === "symbol")?.id;
         m.addSource("nav", { type: "geojson", data: empty });
         const line = { "line-join": "round", "line-cap": "round" } as const;
-        m.addLayer({ id: "nav-alt", type: "line", source: "nav", filter: ["==", ["get", "chosen"], false], layout: line, paint: { "line-color": "#7f9cc9", "line-width": 7, "line-opacity": 0.9 } }, labels);
-        m.addLayer({ id: "nav-casing", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#0a4fa8", "line-width": 11 } }, labels);
-        m.addLayer({ id: "nav-line", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#1a73e8", "line-width": 7 } }, labels);
+        // Apple-like: a bright blue line with a darker edge, thicker as you zoom in; alternatives pale blue.
+        const width = (k: number): ExpressionSpecification => ["interpolate", ["exponential", 1.5], ["zoom"], 10, 3 * k, 15, 7 * k, 18, 16 * k];
+        m.addLayer({ id: "nav-alt-casing", type: "line", source: "nav", filter: ["==", ["get", "chosen"], false], layout: line, paint: { "line-color": "#6f97d6", "line-width": width(1.35) } }, labels);
+        m.addLayer({ id: "nav-alt", type: "line", source: "nav", filter: ["==", ["get", "chosen"], false], layout: line, paint: { "line-color": "#a9c7f5", "line-width": width(1) } }, labels);
+        m.addLayer({ id: "nav-casing", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#0b5bd3", "line-width": width(1.4) } }, labels);
+        m.addLayer({ id: "nav-line", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#2b8bff", "line-width": width(1) } }, labels);
         drawAreas();
         drawNav();
       });
       const media = darkMedia();
       const onScheme = () => {
         styleReady.current = false;
-        m.setStyle(styleUrl());
+        void mapStyle().then((next) => m.setStyle(next));
       };
       media?.addEventListener("change", onScheme);
       schemeOff.current = () => media?.removeEventListener("change", onScheme);
@@ -326,7 +361,8 @@ export function LiveMap({
     const set = (id: string, features: unknown[]) =>
       (m.getSource(id) as { setData: (d: unknown) => void } | undefined)?.setData({ type: "FeatureCollection", features });
     set("radius", pos && r ? [poly(circle(pos, r))] : []);
-    set("me-acc", pos?.accuracy && pos.accuracy > 15 ? [poly(circle(pos, Math.min(pos.accuracy, 5000), 48))] : []);
+    const following = latest.current.nav?.mode === "follow";
+    set("me-acc", !following && pos?.accuracy && pos.accuracy > 15 ? [poly(circle(pos, Math.min(pos.accuracy, 5000), 48))] : []);
     // A light halo around people whose fix is not sharp (like Find My's grey circle).
     set(
       "people-acc",
@@ -340,6 +376,13 @@ export function LiveMap({
     const m = map.current;
     const ml = lib.current;
     if (!m || !ml) return;
+    // Your marker: the navigation arrow while following a route, your photo otherwise.
+    const wantPuck = latest.current.nav?.mode === "follow";
+    if (meMarker.current && (meMarker.current.sig === "puck") !== wantPuck) {
+      meMarker.current.marker.remove();
+      meMarker.current = null;
+      sync();
+    }
     const n = latest.current.nav;
     if (styleReady.current)
       (m.getSource("nav") as { setData: (d: unknown) => void } | undefined)?.setData({
@@ -426,11 +469,18 @@ export function LiveMap({
     const { me: pos, meFace: mf, radius: r, people: list, onSelect: select, talking: live, ageOf: age } = latest.current;
     // you
     if (pos) {
-      const sig = `${mf.name}|${mf.path}`;
+      const puck = latest.current.nav?.mode === "follow";
+      const sig = puck ? "puck" : `${mf.name}|${mf.path}`;
       if (!meMarker.current || meMarker.current.sig !== sig) {
         meMarker.current?.marker.remove();
-        const { el, beam } = meElement(mf.name, mf.path);
-        meMarker.current = { marker: new ml.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m), sig, beam };
+        if (puck) {
+          // Lies on the map and turns with it: rotation is your course in map degrees.
+          const marker = new ml.Marker({ element: puckElement(), rotationAlignment: "map", pitchAlignment: "map" });
+          meMarker.current = { marker: marker.setLngLat([pos.lng, pos.lat]).addTo(m), sig, beam: null };
+        } else {
+          const { el, beam } = meElement(mf.name, mf.path);
+          meMarker.current = { marker: new ml.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m), sig, beam };
+        }
         pointBeam();
       } else glide(meMarker.current.marker, [pos.lng, pos.lat]);
       const kind = pos.live ? "live" : "stored";
@@ -476,15 +526,23 @@ export function LiveMap({
   const talkingKey = talking.join();
   useEffect(sync, [me?.lat, me?.lng, me?.accuracy, me?.live, meFace.name, meFace.path, people, radius, talkingKey]);
   const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
+  // (drawNav reads everything else from `latest`; it re-runs when the route, its mode or the destination change)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(drawNav, [navKey]);
 
   // The beam on your marker follows the compass (or your course).
   const headingRef = useRef(heading);
   headingRef.current = heading;
   function pointBeam() {
-    const b = meMarker.current?.beam;
-    if (!b) return;
+    const cur = meMarker.current;
     const h = headingRef.current;
+    if (cur && !cur.beam) {
+      // The navigation arrow: turned in map degrees (MapLibre adds the map's own rotation).
+      if (h != null) cur.marker.setRotation(h);
+      return;
+    }
+    const b = cur?.beam;
+    if (!b) return;
     b.classList.toggle("hidden", h == null);
     // The beam points on the screen: subtract the map's own rotation (heading-up while navigating).
     if (h != null) b.style.transform = `translate(-50%, -50%) rotate(${h - (map.current?.getBearing() ?? 0)}deg)`;

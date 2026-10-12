@@ -19,6 +19,8 @@ export interface NavProgress {
   /** Metres between the fix and the route. */
   off: number;
   snapped: LatLng;
+  /** Index of the route segment you are on (the map draws only what's ahead of you). */
+  seg: number;
   /** Direction of the route where you are (the heading-up camera uses it). */
   routeBearing: number;
   /** The maneuver you are on (the last one passed) and the next one. */
@@ -144,6 +146,7 @@ export function createProgress(r: PreparedRoute) {
       along,
       off: m.dist,
       snapped: isOff ? (last?.snapped ?? m.point) : m.point,
+      seg,
       routeBearing: rb,
       step,
       next,

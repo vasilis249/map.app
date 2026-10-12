@@ -148,6 +148,11 @@ function MapPage() {
   const nearby = list.filter((p) => p.distance_m <= radius);
   // While navigating: everyone within 200 m (friends included), so you can still talk to them.
   const shown = navActive ? list.filter((p) => p.distance_m <= NEAR_M) : view === "friends" ? friends : nearby;
+  // While navigating, the line shows only the road still ahead (from where you are on it), like Apple Maps.
+  const routePts = nav.route?.route.points ?? [];
+  const aheadOfYou: [number, number][] = nav.progress
+    ? [[nav.progress.snapped.lng, nav.progress.snapped.lat], ...routePts.slice(nav.progress.seg + 1)]
+    : routePts;
   const planFrom = (dest: Place) => {
     if (me) void planTo(dest, me, i18n.language);
   };
@@ -197,7 +202,7 @@ function MapPage() {
         lang={i18n.language}
         nav={
           navActive && nav.route && nav.dest
-            ? { lines: [nav.route.route.points], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null }
+            ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null }
             : planning && nav.dest
               ? { lines: nav.routes.map((r) => r.points), chosen: nav.chosen, dest: nav.dest, mode: "preview", bearing: null, onChoose: chooseRoute }
               : null

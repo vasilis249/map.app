@@ -122,6 +122,7 @@ ok("the banner moved on (next: Filellinon), with the distance to it", await seen
   && /^\d+ μ$/.test((await me.getByTestId("nav-distance").textContent()) ?? ""));
 const cam1 = await camera();
 ok(`heading-up, tilted camera (bearing ${cam1?.bearing}°, pitch ${cam1?.pitch}°)`, cam1?.pitch === 50 && cam1.bearing !== 0);
+ok("you are the navigation arrow (not your photo) while navigating", (await me.locator("[data-puck]").count()) === 1);
 await me.screenshot({ path: `${S}/nav-4-driving.png` });
 
 // 5. Push to talk while navigating: Giorgos waits on the square a little ahead of me; his card from his marker; while I
@@ -186,6 +187,7 @@ await me.getByRole("button", { name: "Τέλος" }).click();
 await me.waitForTimeout(1500);
 ok("end: back to the map (search shown)", await seen(me.getByRole("button", { name: "Πού πας;" })));
 ok("… the screen may sleep again (wake lock released)", (await me.evaluate(() => window.__wake)).at(-1) === "off");
+ok("… and your photo again instead of the arrow", (await me.locator("[data-puck]").count()) === 0 && (await me.locator('[aria-label="me"]').count()) === 1);
 const cam2 = await camera();
 ok(`… flat, north-up camera (bearing ${cam2?.bearing}°, pitch ${cam2?.pitch}°)`, cam2?.pitch === 0 && cam2.bearing === 0);
 

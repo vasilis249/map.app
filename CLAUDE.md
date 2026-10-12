@@ -140,6 +140,14 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   positions are not uploaded (only the route requests' start + destination go to our Worker and the provider).
   Additive kit changes (owner informed): `tracker.ts` exports `BackgroundGeolocation`; `live-map.tsx` gained the `nav`
   prop, the beam compensates the map's rotation, `data-bearing` / `data-pitch` on the map box.
+- D20 (P4, owner request) Map look after Apple Maps: `src/components/map/map-theme.ts` recolours OpenFreeMap "liberty"
+  before MapLibre sees it (no flash), one palette per scheme (dark no longer uses OpenFreeMap's "dark" style): warm
+  neutral land, soft water / parks, white streets with hairline casings, pale-yellow main roads, amber motorways,
+  quiet labels (Noto Sans Regular / Bold), shop / café icons only from z16–18, road-number shields only below z14,
+  solid footpaths, no relief / residential tint, soft light for 3D buildings. Falls back to the plain style URL if
+  the style can't be fetched. While navigating you are a navigation arrow (blue chevron, white edge, lying on the
+  tilted map, turned to your course) instead of your photo; the route is drawn above streets / bridges / buildings
+  and under labels, only the part ahead of you; the guidance banner is dark glass (Apple style).
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
@@ -218,6 +226,8 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   first fix snap 400 m ahead (wrong "Σε 300 μέτρα…" at the start); a standing phone never started guidance (no new fix
   → seeded with the last one); "02:32 μ.μ." arrival → 24-hour; you sat behind the bottom controls in follow mode;
   the banner said "ΕΟ54" instead of "Βασιλίσσης Σοφίας" (turned-onto street, name before road number).
+- Owner request after the summary: navigation arrow + Apple Maps look (D20). Checked with light / dark screenshots
+  (map, route choices, navigation); flows map 27, nearby 16, nav 34 (+ arrow on / photo back) PASS.
 - Not verified: Stadia Maps itself (no key yet: its Pelias autocomplete format is written from the docs, not recorded;
   the Valhalla part is the same engine as the recorded answers), real Greek voice on iOS (native plugin, silent switch,
   locked screen, background), guidance + walkie audio together on a device, background navigation, a real drive (speed /

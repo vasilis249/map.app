@@ -73,7 +73,7 @@ export function NavBanner({ nav }: { nav: NavState }) {
   const afterClose = after && p && r.at[p.next + 1] - r.at[p.next] < 200;
   const lost = p?.offRoute || nav.rerouting;
   return (
-    <div className="w-full overflow-hidden rounded-3xl bg-[#0b3d2e] text-white shadow-float" role="status" aria-live="polite" data-testid="nav-banner">
+    <div className="w-full overflow-hidden rounded-3xl bg-[#1c1c1e]/90 text-white shadow-float backdrop-blur-xl backdrop-saturate-150" role="status" aria-live="polite" data-testid="nav-banner">
       <div className="flex items-center gap-4 p-4">
         {lost ? (
           <Loader2 className="h-12 w-12 shrink-0 animate-spin" aria-hidden />
@@ -96,7 +96,7 @@ export function NavBanner({ nav }: { nav: NavState }) {
         </div>
       </div>
       {!lost && afterClose && after && (
-        <div className="flex items-center gap-2 bg-black/25 px-4 py-2 text-caption font-semibold">
+        <div className="flex items-center gap-2 border-t border-white/10 bg-white/5 px-4 py-2 text-caption font-semibold text-white/85">
           <span>{t("nav.then")}</span>
           <ManeuverIcon kind={after.kind} className="h-5 w-5" />
           <span className="truncate">{label(after)}</span>
