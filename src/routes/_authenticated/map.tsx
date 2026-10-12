@@ -210,9 +210,10 @@ function MapPage() {
       </div>
 
       {/* bottom (above the floating nav) */}
-      <div className="absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-10 flex flex-col gap-3 px-4">
+      {/* Only the controls themselves take taps: the empty space around them lets taps reach the map's markers. */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-10 flex flex-col gap-3 px-4 [&>*:not(.pass-through)]:pointer-events-auto">
         {/* ghost mode (one tap) · back to me */}
-        <div className="flex items-end justify-between gap-3">
+        <div className="pass-through flex items-end justify-between gap-3">
           {s ? <GhostButton sharing={s} /> : <span />}
           {me && (
             <button
@@ -222,7 +223,7 @@ function MapPage() {
                 void enableCompass(); // inside the tap: iOS asks for motion access once
               }}
               aria-label={t("map.recenter")}
-              className="grid h-12 w-12 place-items-center rounded-full glass border border-border/60 shadow-float"
+              className="pointer-events-auto grid h-12 w-12 place-items-center rounded-full glass border border-border/60 shadow-float"
             >
               <LocateFixed className="h-5 w-5 text-link" />
             </button>
@@ -351,9 +352,10 @@ function MapPage() {
 
       {/* one person */}
       <Drawer open={!!current} onOpenChange={(o) => !o && select(null)}>
-        <DrawerContent>
+        {/* Never taller than the screen: the big talk button + history scroll inside on small phones. */}
+        <DrawerContent className="max-h-[92dvh]">
           {current && (
-            <div className="px-5 pb-8 pt-3">
+            <div className="min-h-0 overflow-y-auto px-5 pb-8 pt-3">
               <div className="flex items-center gap-4">
                 <span className={cn("rounded-full p-1 ring-4", current.is_friend ? "ring-success" : "ring-border")}>
                   <UserAvatar name={current.full_name || current.username} path={current.avatar_path} size={64} />

@@ -55,8 +55,13 @@ await gio.ctx.setGeolocation({ latitude: NORTH_300[0], longitude: NORTH_300[1], 
 ok("Giorgos's new position (≈300 m) reaches the server", (await sqlUntil(
   `select (lat > 37.978)::text from private.user_locations where user_id = '${USERS.giorgos.id}'`, "true", 12_000)) === "true");
 ok("… and he is gone from my map", await gone(me.page.getByRole("button", { name: "Γιώργος Κ." }), 12_000));
+// Walking back takes time: the tracker sends at most one position every 3 s (kit rule) and an emulated device only
+// reports a fix when it changes, so a move within 3 s of the last send would wait for the 1-minute heartbeat.
+await gio.page.waitForTimeout(3500);
 await gio.ctx.setGeolocation({ latitude: NORTH_100[0], longitude: NORTH_100[1], accuracy: 10 });
-ok("back at 100 m: on my map again", await seen(me.page.getByRole("button", { name: "Γιώργος Κ." }), 15_000));
+const back = await sqlUntil(`select (lat < 37.977)::text from private.user_locations where user_id = '${USERS.giorgos.id}'`, "true", 15_000);
+const shown = await seen(me.page.getByRole("button", { name: "Γιώργος Κ." }), 20_000);
+ok("back at 100 m: on my map again", back === "true" && shown);
 
 // 6. Ghost mode (Giorgos): one tap → position deleted, gone from my map; another tap → back
 await gio.page.getByRole("button", { name: "Αόρατος" }).click();
@@ -76,6 +81,9 @@ ok("reciprocity: in ghost mode my map shows nobody", await gone(me.page.getByRol
 await gio.page.getByRole("tab", { name: "Κοντά μου" }).click();
 ok("… and Giorgos doesn't see me", await gone(gio.page.getByRole("button", { name: "Βασίλης Χαρ" }), 10_000));
 await me.page.getByRole("button", { name: "Ορατός ξανά" }).click();
+// The phone delivers a fresh fix after sharing restarts (an emulated device only does so when the position changes).
+await me.page.waitForTimeout(1000);
+await me.ctx.setGeolocation({ latitude: HERE[0] + 0.0001, longitude: HERE[1], accuracy: 10 });
 ok("I'm back: Giorgos sees me", await seen(gio.page.getByRole("button", { name: "Βασίλης Χαρ" }), 15_000));
 
 // 8. Block (Giorgos blocks me from my card on his map): we vanish from each other's maps, my follow ends

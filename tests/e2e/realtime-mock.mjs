@@ -23,35 +23,33 @@ export function attachRealtime(server) {
   const wss = new WebSocketServer({ noServer: true });
   const topics = new Map(); // topic -> Map(ws -> member)
   let refN = 0;
-  // Broadcast from the database (realtime.send → realtime.messages rows with an event): relay to the topic.
-  let after = -1;
+  // Broadcast from the database (realtime.send → realtime.messages rows with an event): relay to the topic. The
+  // poll carries the database it last saw: after a reset (a new database) it starts again from its first row.
+  let after = 0;
+  let db = null;
   const poll = () => new Promise((resolve) => {
     const r = http.request({ host: "127.0.0.1", port: 3001, path: "/rpc/rt_poll", method: "POST", headers: { "content-type": "application/json" } }, (up) => {
       let d = ""; up.on("data", (c) => (d += c));
-      up.on("end", () => { try { resolve(up.statusCode === 200 ? JSON.parse(d) : []); } catch { resolve([]); } });
+      up.on("end", () => { try { resolve(up.statusCode === 200 ? JSON.parse(d) : null); } catch { resolve(null); } });
     });
-    r.on("error", () => resolve([]));
-    r.end(JSON.stringify({ p_after: after < 0 ? 2147483647000 : after }));
+    r.on("error", () => resolve(null));
+    r.end(JSON.stringify({ p_after: after, p_db: db }));
   });
   (async () => {
-    // Start after what is already there.
-    const first = await new Promise((resolve) => {
-      const r = http.request({ host: "127.0.0.1", port: 3001, path: "/rpc/rt_poll", method: "POST", headers: { "content-type": "application/json" } }, (up) => {
-        let d = ""; up.on("data", (c) => (d += c)); up.on("end", () => { try { resolve(JSON.parse(d)); } catch { resolve([]); } });
-      });
-      r.on("error", () => resolve([])); r.end(JSON.stringify({ p_after: 0 }));
-    });
-    after = Array.isArray(first) && first.length ? Math.max(...first.map((x) => x.id)) : 0;
-    for (let rows = first; Array.isArray(rows) && rows.length === 100; ) { rows = await poll(); if (rows.length) after = Math.max(...rows.map((x) => x.id)); }
     for (;;) {
-      await new Promise((r) => setTimeout(r, 200));
-      const rows = await poll();
-      if (!Array.isArray(rows)) continue;
-      for (const m of rows) {
-        after = Math.max(after, m.id);
-        const t = "realtime:" + m.topic;
-        for (const [w] of topics.get(t) ?? []) send(w, [null, null, t, "broadcast", { type: "broadcast", event: m.event, payload: m.payload }]);
+      const res = await poll();
+      if (res && typeof res === "object" && "db" in res) {
+        const first = db === null;
+        db = res.db;
+        after = res.after;
+        if (!first)
+          for (const m of res.rows) {
+            const t = "realtime:" + m.topic;
+            for (const [w] of topics.get(t) ?? []) send(w, [null, null, t, "broadcast", { type: "broadcast", event: m.event, payload: m.payload }]);
+          }
+        if (res.rows.length === 100) continue; // more waiting
       }
+      await new Promise((r) => setTimeout(r, 200));
     }
   })();
   server.on("upgrade", (req, socket, head) => {

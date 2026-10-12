@@ -97,6 +97,15 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   open channels to them deleted). Every decision records resolved_by / resolved_at / resolution. A disabled account
   sees a suspension screen; others can't find it anywhere. Re-enable from the resolved tab.
 - D13 (P2) Lists page with offset (50 per page, "More"); notices carry "Follow back"; suggestions on empty search.
+- D14 (P3) Talk safety: a one-time notice before the first push-to-talk (`SafetyGate`, remembered on the device);
+  while the phone moves faster than 18 km/h (`useDriving`, from the device's own fixes) the talk screens show only the
+  name and the big button (no history, no switches). Map card PTT enlarged to 144 px; the card scrolls inside
+  (max 92 dvh) and the PTT is `data-vaul-no-drag` (holding it must never drag the bottom sheet).
+- D15 (P3) Report one saved transmission (flag on the other person's history rows) → `report_content('walkie'|'nearby')`.
+  The Walkie tab shows the unheard count. The map's bottom controls pass taps through their empty space (markers
+  underneath stay tappable).
+- PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
+  opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
   `capacitor.config.ts`, `ios/App/App/Info.plist`).
 
@@ -126,7 +135,7 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Not verified: real iPhone (background location, Always permission, Precise off → temporary full accuracy), the
   1 s driving rate on a real drive, real Supabase project. People refresh by polling every 5 s (not push).
 
-### P2 — social (done, awaiting OK)
+### P2 — social (done, OK'd)
 - Followers / following lists (paged; remove a follower on your own), clickable counts on profiles, suggestions,
   follow back from notices, blocked list + unblock, report/block (⋯) on the walkie screen too, admin moderation
   screen (`/admin`), suspended-account screen.
@@ -137,4 +146,19 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   caller's pipe open and hung `run.sh`).
 - Not verified: real Supabase project / real Realtime; moderation emails / notifications to admins (none yet: admins
   look at the queue). Notifications refresh by polling (60 s badge), not live.
+
+### P3 — push-to-talk (done in the browser; real-iPhone test pending, awaiting OK)
+- Kit flows ported to this app's screens and seed (`tests/e2e/`): walkie 12, walkie-ios 7, walkie-robust 6,
+  walkie-hub 13, walkie-reconnect 5, nearby 16 (+ safety notice, report one transmission) — all PASS; with auth 23,
+  map 27, social 25 the whole browser suite passes. `tests/e2e/lib.mjs` carries the kit's audio probes (pieces / peak
+  counter, replays, socket cut, slow getUserMedia, iOS audio-session model).
+- Real bugs found and fixed: the map card was taller than an iPhone 13 screen (PTT off-screen) → scrolls inside;
+  holding the PTT could drag the bottom sheet → data-vaul-no-drag; the map's bottom controls swallowed taps on
+  markers beneath them → pass-through.
+- Harness: the Realtime mock now notices a database reset (rt_poll takes the db oid) instead of skipping the first
+  broadcasts of the new database; flows wait for a bottom sheet to settle before pressing.
+- Kit's micsession / ptt flows not ported: they drive Speak's composer and DMs, which this app doesn't have.
+  `use-recorder.ts` / `use-push-to-talk.ts` stay unused (ask the owner: delete, or keep for a future voice note).
+- Not verified: real Supabase Realtime, real iPhones (silent switch, locked screen, background), driving mode with a
+  real moving phone (Playwright can't emulate speed) → `docs/DEVICE-TEST-P3.md`.
 

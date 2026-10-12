@@ -41,8 +41,14 @@ export const browser = await chromium.launch({
     ...(proxy ? [`--proxy-server=${proxy}`] : [])],
 });
 
-/** A phone (iPhone 13 viewport, Greek, Athens) signed in as `who`, at `geo` if given, opened at `path`. */
-export async function open(who, path, { geo, tag = who } = {}) {
+/**
+ * A phone (iPhone 13 viewport, Greek, Athens) signed in as `who`, at `geo` if given, opened at `path`.
+ * Audio probes in every page: window.__rx (16 kHz walkie pieces played + peak), window.__replays (saved copies
+ * decoded and played), window.__sockets (to cut one), window.__gumDelay (slow getUserMedia, ms, like iOS).
+ * ios: model WebKit — any navigator.audioSession.type change suspends every AudioContext (LESSONS #1).
+ * safetySeen (default true): the one-time talk safety notice was already acknowledged.
+ */
+export async function open(who, path, { geo, tag = who, ios = false, safetySeen = true } = {}) {
   const u = USERS[who];
   const r = await fetch(`${SUPABASE}/auth/v1/token?grant_type=password`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: u.email, password: "test-pass-1" }),
@@ -55,11 +61,76 @@ export async function open(who, path, { geo, tag = who } = {}) {
     ...(geo ? { geolocation: { latitude: geo[0], longitude: geo[1], accuracy: 10 } } : {}),
   });
   await ctx.addInitScript((s) => { try { localStorage.setItem("sb-127-auth-token", JSON.stringify(s)); } catch { /* ignore */ } }, session);
+  if (safetySeen) await ctx.addInitScript(() => { try { localStorage.setItem("mapapp:talkSafetyOk", "1"); } catch { /* ignore */ } });
+  await ctx.addInitScript(() => {
+    window.__rx = { pieces: 0, peak: 0 };
+    window.__replays = 0;
+    const start = AudioBufferSourceNode.prototype.start;
+    AudioBufferSourceNode.prototype.start = function (...a) {
+      const b = this.buffer;
+      if (b && b.sampleRate === 16000 && b.length >= 1000) {
+        window.__rx.pieces++;
+        const d = b.getChannelData(0);
+        for (let i = 0; i < d.length; i += 7) window.__rx.peak = Math.max(window.__rx.peak, Math.abs(d[i]));
+      } else if (b && b.duration > 0.5) window.__replays++;
+      return start.apply(this, a);
+    };
+    window.__sockets = [];
+    const WS = window.WebSocket;
+    window.WebSocket = class extends WS { constructor(...a) { super(...a); window.__sockets.push(this); } };
+    const gum = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+    navigator.mediaDevices.getUserMedia = async (c) => {
+      const st = await gum(c);
+      if (window.__gumDelay) await new Promise((r) => setTimeout(r, window.__gumDelay));
+      return st;
+    };
+  });
+  if (ios)
+    await ctx.addInitScript(() => {
+      const ctxs = [];
+      const AC = window.AudioContext;
+      window.AudioContext = class extends AC { constructor(...a) { super(...a); ctxs.push(this); } };
+      let type = "auto";
+      Object.defineProperty(navigator, "audioSession", { configurable: true, value: {
+        get type() { return type; },
+        set type(t) { if (t !== type) { type = t; window.__switches = (window.__switches || 0) + 1; ctxs.forEach((c) => c.state === "running" && c.suspend()); } },
+      } });
+    });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(`${tag}: ${e.message}`));
   page.on("console", (m) => m.type() === "error" && !/Failed to load resource|WebGL|GPU stall/i.test(m.text()) && errors.push(`${tag} console: ${m.text().slice(0, 200)}`));
   await page.goto(base + path, { waitUntil: "load" });
   return { page, ctx };
+}
+
+/** Pieces / peak this page has played so far. */
+export const rx = (page) => page.evaluate(() => ({ ...window.__rx }));
+export const PTT = "Κράτα πατημένο και μίλα";
+/** Hold the push-to-talk button for `ms` (optionally doing something while held). */
+export async function hold(page, ms, during, name = PTT) {
+  const btn = page.getByRole("button", { name });
+  await btn.scrollIntoViewIfNeeded();
+  // Like a person: wait while it says "connecting" (disabled), up to 10 s; a button that stays off is pressed anyway
+  // (the flows that expect a refusal check what happens).
+  for (let i = 0; i < 50 && (await btn.isDisabled().catch(() => false)); i++) await page.waitForTimeout(200);
+  // Wait until it stops moving (a bottom sheet may still be sliding up).
+  let b = await btn.boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(100);
+    const n = await btn.boundingBox();
+    if (n && b && Math.abs(n.y - b.y) < 1 && Math.abs(n.x - b.x) < 1) break;
+    b = n;
+  }
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(ms);
+  if (during) await during();
+  await page.mouse.up();
+}
+/** iOS needs one tap before Web Audio plays: tap the "listen live" button if it is shown. */
+export async function unlock(page) {
+  const u = page.getByRole("button", { name: "Πάτα για να ακούς ζωντανά" });
+  if (await u.isVisible().catch(() => false)) await u.click();
 }
 
 export async function done() {

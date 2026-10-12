@@ -142,6 +142,8 @@ export function NearbyTalk({ person, onReport }: { person: MapPerson; onReport?:
           )}
           <button
             type="button"
+            // The card is a bottom sheet: holding to talk must never start dragging the sheet.
+            data-vaul-no-drag=""
             disabled={disabled}
             onPointerDown={(e) => void down(e)}
             onPointerUp={up}
