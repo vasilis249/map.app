@@ -278,7 +278,8 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Browser flow `reports` (17 checks, 3 phones): one-tap report at your position, own pin (no voting), warning chip +
   voice once while navigating, "still there?" when passing → "no", a second "no" from someone nearby removes it for
   everyone (+ strike), pins for a walker within 2 km, card without author, abuse report into the queue. Full suite
-  re-run with the P5 map changes: (pending — see the next commit).
+  re-run with the P5 map changes, all PASS: auth 23, map 27, social 25, walkie 12 + 7 + 6 + 13 + 5, nearby 16, nav 38,
+  reports 17 (no page errors).
 - Harness: `route-helpers.mjs` (recorded routes, drive points, voice recorder) shared by nav / reports flows; a locator
   read inside a loop needs a short timeout (Playwright waits 30 s for a missing one).
 - Not verified: real drivers and many simultaneous users, reports on a real moving phone (speed / course from GPS),
