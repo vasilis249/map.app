@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Search, Users } from "lucide-react";
@@ -10,8 +10,14 @@ import { NearbyTalk } from "@/components/map/nearby-talk";
 import { NavBanner, NavFooter, RoutePreview, SpeedBubble } from "@/components/nav/nav-ui";
 import { NavSearch } from "@/components/nav/nav-search";
 import { spokenDistance } from "@/lib/nav/format";
+import { spokenMetres } from "@/lib/nav/guidance";
+import { RoadAheadChip, RoadAskCard, RoadDetailSheet, RoadReportButton, RoadReportSheet } from "@/components/road/road-ui";
+import { createRoadReport, RoadApiError, reportRoadAbuse, voteRoadReport } from "@/lib/reports/api";
+import { createReportAlerts, relevant, type RoadKind, type RoadReport } from "@/lib/reports/road";
+import { useRoadReports } from "@/lib/reports/use-road";
+import { toast } from "sonner";
 import type { Place } from "@/lib/nav/route";
-import { chooseRoute, planTo, useNav, type NavTexts } from "@/lib/nav/session";
+import { announce, chooseRoute, planTo, useNav, type NavTexts } from "@/lib/nav/session";
 import { FollowButton } from "@/components/friends/follow-button";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { useHubPeers } from "@/components/walkie/walkie-hub";
@@ -159,6 +165,58 @@ function MapPage() {
   const aheadOfYou: [number, number][] = nav.progress
     ? [[nav.progress.snapped.lng, nav.progress.snapped.lat], ...routePts.slice(nav.progress.seg + 1)]
     : routePts;
+  // Road reports (Waze-style): pins on the map; while navigating, a warning for those on the route ahead (chip +
+  // voice) and "still there?" as you pass one.
+  const roads = useRoadReports(me, navActive ? nav.route : null);
+  const roadList = roads.data ?? [];
+  const [reporting, setReporting] = useState(false);
+  const [roadOpen, setRoadOpen] = useState<string | null>(null);
+  const [roadAsk, setRoadAsk] = useState<RoadReport | null>(null);
+  const [roadWarn, setRoadWarn] = useState<string | null>(null);
+  const roadAlerts = useRef(createReportAlerts());
+  const roadAhead = navActive && nav.route && nav.progress ? relevant(roadList, nav.fix, nav.route, nav.progress.along) : [];
+  const warnNow = roadWarn ? roadAhead.find((a) => a.report.id === roadWarn && a.distance > 30) : undefined;
+  useEffect(() => {
+    if (navActive) roadAlerts.current = createReportAlerts();
+    else {
+      setRoadAsk(null);
+      setRoadWarn(null);
+    }
+  }, [navActive]);
+  const progressAlong = nav.progress?.along;
+  useEffect(() => {
+    if (!navActive || progressAlong == null) return;
+    const e = roadAlerts.current.next(roadAhead, nav.fix?.speed, nav.fix);
+    if (!e) return;
+    if (e.type === "ask") return setRoadAsk(e.report);
+    setRoadWarn(e.report.id);
+    const kind = t(`road.kinds.${e.report.kind}`);
+    announce(`road:${e.report.id}`, t("road.sayAhead", { kind, distance: spokenDistance(spokenMetres(e.distance), t, i18n.language) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressAlong, navActive]);
+  const roadError = (e: unknown) =>
+    toast(t(e instanceof RoadApiError && e.code !== "generic" ? `road.errors.${e.code}` : "errors.generic"));
+  const refreshRoads = () => void qc.invalidateQueries({ queryKey: ["road"] });
+  const reportRoad = (kind: RoadKind) => {
+    setReporting(false);
+    if (!me) return void toast(t("road.errors.no_position"));
+    createRoadReport(kind, me, nav.fix?.course ?? local.fix?.course ?? null)
+      .then(() => {
+        toast(t("road.thanks"));
+        refreshRoads();
+      })
+      .catch(roadError);
+  };
+  const voteRoad = (r: RoadReport, v: 1 | -1) => {
+    setRoadOpen(null);
+    setRoadAsk(null);
+    voteRoadReport(r.id, v)
+      .then(() => {
+        toast(t("road.votedThanks"));
+        refreshRoads();
+      })
+      .catch(roadError);
+  };
   const planFrom = (dest: Place) => {
     if (me) void planTo(dest, me, i18n.language);
   };
@@ -206,6 +264,9 @@ function MapPage() {
         heading={navActive ? (nav.fix?.course ?? nav.progress?.routeBearing ?? heading) : heading}
         ageOf={ageOf}
         lang={i18n.language}
+        roads={roadList}
+        roadLabel={(k) => t(`road.kinds.${k}`)}
+        onSelectRoad={setRoadOpen}
         nav={
           navActive && nav.route && nav.dest
             ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion }
@@ -233,6 +294,7 @@ function MapPage() {
             <NavBanner nav={nav} />
           </div>
         )}
+        {navActive && warnNow && <RoadAheadChip report={warnNow.report} distance={warnNow.distance} />}
         {plain && (
           <button
             type="button"
@@ -286,6 +348,8 @@ function MapPage() {
             {navActive && <SpeedBubble kmh={nav.speedKmh} />}
             {s ? <GhostButton sharing={s} /> : <span />}
           </div>
+          <div className="flex items-end gap-2">
+          {me && !planning && <RoadReportButton onClick={() => setReporting(true)} />}
           {me && (
             <button
               type="button"
@@ -299,7 +363,10 @@ function MapPage() {
               <LocateFixed className="h-5 w-5 text-link" />
             </button>
           )}
+          </div>
         </div>
+
+        {navActive && roadAsk && <RoadAskCard report={roadAsk} onVote={(v) => voteRoad(roadAsk, v)} onDismiss={() => setRoadAsk(null)} />}
 
         {navActive && <NavFooter nav={nav} />}
         {planning && <RoutePreview nav={nav} texts={navTexts} />}
@@ -516,6 +583,19 @@ function MapPage() {
           )}
         </DrawerContent>
       </Drawer>
+
+      <RoadReportSheet open={reporting} onOpenChange={setReporting} onPick={reportRoad} />
+      <RoadDetailSheet
+        report={roadList.find((r) => r.id === roadOpen) ?? null}
+        onClose={() => setRoadOpen(null)}
+        onVote={voteRoad}
+        onAbuse={(r) => {
+          setRoadOpen(null);
+          reportRoadAbuse(r.id)
+            .then(() => toast(t("road.abuseDone")))
+            .catch(roadError);
+        }}
+      />
 
       <PersonActionsSheet
         person={actionsFor && { id: actionsFor.user_id, username: actionsFor.username, full_name: actionsFor.full_name, avatar_path: actionsFor.avatar_path }}

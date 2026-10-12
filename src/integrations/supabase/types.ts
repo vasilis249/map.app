@@ -258,8 +258,9 @@ export type Database = {
     };
     Views: { [_ in never]: never };
     Functions: {
+      admin_remove_road_report: { Args: { p_id: string }; Returns: undefined };
       admin_report_audio: { Args: { p_report: string }; Returns: { mime: string; audio_b64: string }[] };
-      admin_reports: { Args: { p_open?: boolean; p_limit?: number; p_before?: string }; Returns: { id: string; created_at: string; kind: string; reason: string; target_id: string; resolved_at: string; resolution: string; reporter_id: string; reporter_username: string; target_user_id: string; target_username: string; target_full_name: string; target_avatar_path: string; target_disabled: boolean; target_open_reports: number; has_audio: boolean }[] };
+      admin_reports: { Args: { p_open?: boolean; p_limit?: number; p_before?: string }; Returns: { id: string; created_at: string; kind: string; reason: string; target_id: string; resolved_at: string; resolution: string; reporter_id: string; reporter_username: string; target_user_id: string; target_username: string; target_full_name: string; target_avatar_path: string; target_disabled: boolean; target_open_reports: number; has_audio: boolean; road_kind: string }[] };
       admin_resolve_report: { Args: { p_report: string; p_action: string }; Returns: undefined };
       admin_set_disabled: { Args: { p_user: string; p_disabled: boolean }; Returns: undefined };
       am_i_admin: { Args: Record<PropertyKey, never>; Returns: boolean };
@@ -277,6 +278,9 @@ export type Database = {
       profile_stats: { Args: { p_user: string }; Returns: { followers: number; following: number; i_follow: boolean; follows_me: boolean }[] };
       remove_follower: { Args: { p_user: string }; Returns: undefined };
       report_content: { Args: { p_kind: string; p_target: string; p_reason?: string }; Returns: undefined };
+      road_report: { Args: { p_kind: string; p_lat: number; p_lng: number; p_heading?: number }; Returns: string };
+      road_reports_in: { Args: { p_min_lat: number; p_min_lng: number; p_max_lat: number; p_max_lng: number }; Returns: { id: string; kind: string; lat: number; lng: number; heading: number; created_at: string; expires_at: string; up: number; down: number; mine: boolean; voted: number }[] };
+      road_vote: { Args: { p_id: string; p_vote: number }; Returns: undefined };
       search_users: { Args: { p_query: string }; Returns: { id: string; username: string; full_name: string; avatar_path: string; i_follow: boolean; follows_me: boolean }[] };
       send_nearby: { Args: { p_to: string; p_audio_b64: string; p_mime: string; p_duration_ms: number }; Returns: string };
       send_walkie: { Args: { p_to: string; p_audio_b64: string; p_mime: string; p_duration_ms: number }; Returns: string };

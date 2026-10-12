@@ -8,6 +8,7 @@ import { avatarUrl } from "@/lib/avatar";
 import { themeStyle } from "./map-theme";
 import type { Motion } from "@/lib/nav/motion";
 import { createPeople3d, PEOPLE_3D_LAYER, type Figure } from "./people-3d";
+import { ROAD_ICON_PATHS } from "./road-icons";
 import type { MapPerson } from "@/lib/location/api";
 
 /**
@@ -87,6 +88,36 @@ function flagElement(): HTMLElement {
   el.innerHTML =
     '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528"/></svg>';
   return el;
+}
+
+/** A road report on the map (Waze-style pin). */
+export interface MapRoad {
+  id: string;
+  kind: keyof typeof ROAD_ICON_PATHS;
+  lat: number;
+  lng: number;
+}
+const ROAD_COLORS: Record<MapRoad["kind"], string> = {
+  accident: "#ff3b30",
+  police: "#0a84ff",
+  hazard: "#ff9f0a",
+  traffic: "#ff6a00",
+  closed: "#c4001a",
+};
+
+function roadElement(r: MapRoad, label: string, onSelect: (id: string) => void): HTMLElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.setAttribute("aria-label", label);
+  btn.dataset.road = r.kind;
+  btn.className = "grid h-9 w-9 place-items-center rounded-full border-2 border-white text-white shadow-float";
+  btn.style.background = ROAD_COLORS[r.kind];
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ROAD_ICON_PATHS[r.kind]}</svg>`;
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onSelect(r.id);
+  });
+  return btn;
 }
 
 /** Where to move the camera: yourself, your radius, or a point (a friend). Change `key` to move again. */
@@ -227,6 +258,9 @@ export function LiveMap({
   ageOf,
   lang,
   nav = null,
+  roads = [],
+  roadLabel = (k) => k,
+  onSelectRoad = () => {},
 }: {
   me: LivePosition | null;
   meFace: { name: string; path: string | null };
@@ -245,6 +279,10 @@ export function LiveMap({
   lang: string;
   /** Navigation (route lines, destination, follow camera), or null. */
   nav?: MapNav | null;
+  /** Road reports to show (Waze-style pins); tapping one calls onSelectRoad. */
+  roads?: MapRoad[];
+  roadLabel?: (kind: MapRoad["kind"]) => string;
+  onSelectRoad?: (id: string) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -257,8 +295,9 @@ export function LiveMap({
   const placed = useRef<"none" | "stored" | "live">("none");
   const userMoved = useRef(false);
   const schemeOff = useRef<(() => void) | null>(null);
-  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang, nav });
-  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang, nav };
+  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad });
+  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad };
+  const roadMarkers = useRef(new Map<string, { marker: Marker; sig: string }>());
   const destMarker = useRef<Marker | null>(null);
   // Follow mode paused because you moved the map yourself (the recenter button resumes it).
   const navFree = useRef(false);
@@ -271,6 +310,7 @@ export function LiveMap({
   useEffect(() => {
     let cancelled = false;
     const all = markers.current;
+    const roadPins = roadMarkers.current;
     void Promise.all([import("maplibre-gl"), mapStyle()]).then(([ml, style]) => {
       if (cancelled || !box.current) return;
       if (ml.getWorkerUrl() !== maplibreWorkerUrl) ml.setWorkerUrl(maplibreWorkerUrl);
@@ -360,6 +400,8 @@ export function LiveMap({
       map.current?.remove();
       map.current = null;
       all.clear();
+      roadPins.forEach(({ marker }) => marker.remove());
+      roadPins.clear();
       if (loop.current != null) cancelAnimationFrame(loop.current);
       loop.current = null;
       meMarker.current = null;
@@ -631,8 +673,32 @@ export function LiveMap({
         markers.current.delete(id);
       }
     }
+    drawRoads();
     drawAreas();
     navCamera();
+  }
+
+  /** Road report pins (plain DOM markers, like the people). */
+  function drawRoads() {
+    const m = map.current;
+    const ml = lib.current;
+    if (!m || !ml) return;
+    const { roads: list, roadLabel: label } = latest.current;
+    const seen = new Set<string>();
+    for (const r of list) {
+      seen.add(r.id);
+      const sig = `${r.kind}|${r.lat}|${r.lng}`;
+      const cur = roadMarkers.current.get(r.id);
+      if (cur?.sig === sig) continue;
+      cur?.marker.remove();
+      const marker = new ml.Marker({ element: roadElement(r, label(r.kind), (id) => latest.current.onSelectRoad(id)) }).setLngLat([r.lng, r.lat]).addTo(m);
+      roadMarkers.current.set(r.id, { marker, sig });
+    }
+    for (const [id, { marker }] of roadMarkers.current)
+      if (!seen.has(id)) {
+        marker.remove();
+        roadMarkers.current.delete(id);
+      }
   }
 
   // Language switched while the map is open.
@@ -642,6 +708,8 @@ export function LiveMap({
 
   const talkingKey = talking.join();
   useEffect(sync, [me?.lat, me?.lng, me?.accuracy, me?.live, meFace.name, meFace.path, people, radius, talkingKey]);
+  const roadsKey = roads.map((r) => `${r.id}${r.kind}`).join();
+  useEffect(drawRoads, [roadsKey]);
   const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
   // (drawNav reads everything else from `latest`; it re-runs when the route, its mode or the destination change)
   // eslint-disable-next-line react-hooks/exhaustive-deps

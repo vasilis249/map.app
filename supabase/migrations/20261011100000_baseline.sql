@@ -238,13 +238,13 @@ CREATE TABLE public.reports (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   reporter_id uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
   target_user_id uuid NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
-  kind text NOT NULL CHECK (kind IN ('user', 'walkie', 'nearby')),
+  kind text NOT NULL CHECK (kind IN ('user', 'walkie', 'nearby', 'road')),
   target_id uuid,
   reason text NOT NULL DEFAULT '' CHECK (char_length(reason) <= 500),
   created_at timestamptz NOT NULL DEFAULT now(),
   resolved_at timestamptz,
   resolved_by uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
-  resolution text CHECK (resolution IN ('dismissed', 'disabled')),
+  resolution text CHECK (resolution IN ('dismissed', 'disabled', 'removed')),
   CHECK ((resolved_at IS NULL) = (resolution IS NULL))
 );
 CREATE INDEX reports_open ON public.reports (created_at) WHERE resolved_at IS NULL;
@@ -1045,6 +1045,10 @@ BEGIN
     SELECT m.sender_id INTO target_user FROM public.walkie_messages m WHERE m.id = p_target AND m.recipient_id = uid;
   ELSIF p_kind = 'nearby' THEN
     SELECT m.sender_id INTO target_user FROM public.nearby_messages m WHERE m.id = p_target AND m.recipient_id = uid;
+  ELSIF p_kind = 'road' THEN
+    -- A road report you can see (active, not between blocked people); its author stays hidden from you.
+    SELECT r.created_by INTO target_user FROM private.road_reports r
+    WHERE r.id = p_target AND private.road_active(r) AND NOT private.is_blocked(uid, r.created_by);
   END IF;
   IF target_user IS NULL OR target_user = uid THEN
     RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002';
@@ -1070,7 +1074,7 @@ CREATE FUNCTION public.admin_reports(p_open boolean DEFAULT true, p_limit int DE
 RETURNS TABLE (id uuid, created_at timestamptz, kind text, reason text, target_id uuid, resolved_at timestamptz,
                resolution text, reporter_id uuid, reporter_username text, target_user_id uuid, target_username text,
                target_full_name text, target_avatar_path text, target_disabled boolean, target_open_reports int,
-               has_audio boolean)
+               has_audio boolean, road_kind text)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 BEGIN
   PERFORM private.admin_me();
@@ -1081,7 +1085,8 @@ BEGIN
          CASE r.kind
            WHEN 'walkie' THEN EXISTS (SELECT 1 FROM private.walkie_audio a WHERE a.message_id = r.target_id)
            WHEN 'nearby' THEN EXISTS (SELECT 1 FROM private.nearby_audio a WHERE a.message_id = r.target_id)
-           ELSE false END
+           ELSE false END,
+         CASE WHEN r.kind = 'road' THEN (SELECT x.kind FROM private.road_reports x WHERE x.id = r.target_id) END
   FROM public.reports r
   JOIN public.profiles tp ON tp.id = r.target_user_id
   LEFT JOIN public.profiles rp ON rp.id = r.reporter_id
@@ -1163,6 +1168,182 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
+-- 11d. Road reports (Waze-style): accident / police / hazard / traffic / closed road, dropped on your position.
+-- Anonymous to everyone else (nobody gets created_by), hidden between blocked pairs and from disabled accounts.
+-- They expire by kind; "still there" (+1) extends one, two more "not there" than "still there" hide it. The same
+-- kind within 100 m while active counts as a confirmation, not a new report. Privacy: a report is who + where +
+-- when, so the row is deleted a day after it expires (unless an abuse report about it is open); what stays for abuse
+-- control is only a location-free strike per removed report (7 days).
+-- ---------------------------------------------------------------------------
+CREATE TABLE private.road_reports (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind text NOT NULL CHECK (kind IN ('accident', 'police', 'hazard', 'traffic', 'closed')),
+  lat double precision NOT NULL CHECK (lat BETWEEN -90 AND 90),
+  lng double precision NOT NULL CHECK (lng BETWEEN -180 AND 180),
+  heading real,
+  created_by uuid NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL,
+  up int NOT NULL DEFAULT 0,
+  down int NOT NULL DEFAULT 0,
+  removed_at timestamptz,
+  removed_by uuid REFERENCES public.profiles (id) ON DELETE SET NULL
+);
+CREATE INDEX road_reports_box ON private.road_reports (lat, lng) WHERE removed_at IS NULL;
+ALTER TABLE private.road_reports ENABLE ROW LEVEL SECURITY;
+
+CREATE TABLE private.road_votes (
+  report_id uuid NOT NULL REFERENCES private.road_reports (id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
+  vote smallint NOT NULL CHECK (vote IN (-1, 1)),
+  at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (report_id, user_id)
+);
+ALTER TABLE private.road_votes ENABLE ROW LEVEL SECURITY;
+
+-- A removed report (voted away or removed by a moderator): no place, no time of day kept — just that it happened.
+CREATE TABLE private.road_strikes (
+  user_id uuid NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
+  at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX road_strikes_user ON private.road_strikes (user_id, at);
+ALTER TABLE private.road_strikes ENABLE ROW LEVEL SECURITY;
+
+-- How long a report lives (and what a "still there" can extend it to).
+CREATE FUNCTION private.road_ttl(p_kind text)
+RETURNS interval LANGUAGE sql IMMUTABLE SET search_path = '' AS $$
+  SELECT CASE p_kind
+    WHEN 'traffic' THEN interval '30 minutes'
+    WHEN 'police' THEN interval '1 hour'
+    WHEN 'accident' THEN interval '1 hour'
+    WHEN 'hazard' THEN interval '2 hours'
+    WHEN 'closed' THEN interval '6 hours'
+  END
+$$;
+
+CREATE FUNCTION private.road_active(r private.road_reports)
+RETURNS boolean LANGUAGE sql STABLE SET search_path = '' AS $$
+  SELECT r.removed_at IS NULL AND r.expires_at > now()
+$$;
+
+-- Removed: hidden at once, a strike for its author.
+CREATE FUNCTION private.road_remove(p_id uuid, p_by uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE author uuid;
+BEGIN
+  UPDATE private.road_reports SET removed_at = now(), removed_by = p_by
+  WHERE id = p_id AND removed_at IS NULL RETURNING created_by INTO author;
+  IF author IS NOT NULL THEN INSERT INTO private.road_strikes (user_id) VALUES (author); END IF;
+END $$;
+
+-- Report something at (p_lat, p_lng) in your direction of travel (p_heading). Returns the report's id (an existing
+-- one nearby of the same kind when this is a confirmation). Errors: bad_input, too_many_strikes, rate_limited.
+CREATE FUNCTION public.road_report(p_kind text, p_lat double precision, p_lng double precision, p_heading real DEFAULT NULL)
+RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  uid uuid := private.me();
+  ttl interval := private.road_ttl(p_kind);
+  same private.road_reports;
+  rid uuid;
+BEGIN
+  IF ttl IS NULL OR p_lat IS NULL OR p_lng IS NULL OR p_lat NOT BETWEEN -90 AND 90 OR p_lng NOT BETWEEN -180 AND 180 THEN
+    RAISE EXCEPTION 'bad_input' USING ERRCODE = '22023';
+  END IF;
+  -- Five reports voted away / removed in a week: no more reports for now.
+  IF (SELECT count(*) FROM private.road_strikes WHERE user_id = uid AND at > now() - interval '7 days') >= 5 THEN
+    RAISE EXCEPTION 'too_many_strikes' USING ERRCODE = '42501';
+  END IF;
+  PERFORM private.rate_limit('road_report', 10, interval '10 minutes');
+  PERFORM private.rate_limit('road_report_day', 40, interval '1 day');
+  SELECT * INTO same FROM private.road_reports r
+  WHERE r.kind = p_kind AND private.road_active(r)
+    AND r.lat BETWEEN p_lat - 0.001 AND p_lat + 0.001
+    AND r.lng BETWEEN p_lng - 0.0015 AND p_lng + 0.0015
+    AND private.distance_m(r.lat, r.lng, p_lat, p_lng) <= 100
+    AND NOT private.is_blocked(uid, r.created_by)
+  ORDER BY private.distance_m(r.lat, r.lng, p_lat, p_lng) LIMIT 1;
+  IF FOUND THEN
+    IF same.created_by <> uid THEN PERFORM public.road_vote(same.id, 1); END IF;
+    RETURN same.id;
+  END IF;
+  INSERT INTO private.road_reports (kind, lat, lng, heading, created_by, expires_at)
+  VALUES (p_kind, p_lat, p_lng, CASE WHEN p_heading >= 0 AND p_heading < 360 THEN p_heading END, uid, now() + ttl)
+  RETURNING id INTO rid;
+  RETURN rid;
+END $$;
+
+-- "Still there" (+1) / "not there" (-1); you can change your mind, not vote on your own. +1 extends the report (up to
+-- its full time from now); two more -1 than +1 remove it. Errors: not_found, own_report, bad_input, rate_limited.
+CREATE FUNCTION public.road_vote(p_id uuid, p_vote int)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE
+  uid uuid := private.me();
+  r private.road_reports;
+BEGIN
+  IF p_vote NOT IN (-1, 1) THEN RAISE EXCEPTION 'bad_input' USING ERRCODE = '22023'; END IF;
+  SELECT * INTO r FROM private.road_reports x WHERE x.id = p_id FOR UPDATE;
+  IF NOT FOUND OR NOT private.road_active(r) OR private.is_blocked(uid, r.created_by) THEN
+    RAISE EXCEPTION 'not_found' USING ERRCODE = 'P0002';
+  END IF;
+  IF r.created_by = uid THEN RAISE EXCEPTION 'own_report' USING ERRCODE = '42501'; END IF;
+  PERFORM private.rate_limit('road_vote', 60, interval '10 minutes');
+  INSERT INTO private.road_votes AS v (report_id, user_id, vote) VALUES (p_id, uid, p_vote)
+  ON CONFLICT (report_id, user_id) DO UPDATE SET vote = EXCLUDED.vote, at = now();
+  UPDATE private.road_reports x SET
+    up = (SELECT count(*) FROM private.road_votes v WHERE v.report_id = p_id AND v.vote = 1),
+    down = (SELECT count(*) FROM private.road_votes v WHERE v.report_id = p_id AND v.vote = -1),
+    expires_at = CASE WHEN p_vote = 1 THEN greatest(x.expires_at, now() + private.road_ttl(x.kind) / 2) ELSE x.expires_at END
+  WHERE x.id = p_id;
+  IF (SELECT down - up FROM private.road_reports WHERE id = p_id) >= 2 THEN
+    PERFORM private.road_remove(p_id, NULL);
+  END IF;
+END $$;
+
+-- Active reports in a box (your surroundings, or your route's bounds; the app filters along the route itself).
+-- At most ~2° a side; nearest to the box centre first, 300 at most. Who made them is never returned.
+CREATE FUNCTION public.road_reports_in(p_min_lat double precision, p_min_lng double precision,
+                                       p_max_lat double precision, p_max_lng double precision)
+RETURNS TABLE (id uuid, kind text, lat double precision, lng double precision, heading real, created_at timestamptz,
+               expires_at timestamptz, up int, down int, mine boolean, voted int)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := private.me();
+BEGIN
+  IF p_min_lat IS NULL OR p_max_lat IS NULL OR p_min_lng IS NULL OR p_max_lng IS NULL
+     OR p_max_lat < p_min_lat OR p_max_lng < p_min_lng OR p_max_lat - p_min_lat > 2 OR p_max_lng - p_min_lng > 2.5 THEN
+    RAISE EXCEPTION 'bad_input' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT r.id, r.kind, r.lat, r.lng, r.heading, r.created_at, r.expires_at, r.up, r.down, r.created_by = uid,
+         coalesce((SELECT v.vote::int FROM private.road_votes v WHERE v.report_id = r.id AND v.user_id = uid), 0)
+  FROM private.road_reports r
+  JOIN public.profiles p ON p.id = r.created_by AND NOT p.disabled
+  WHERE r.removed_at IS NULL AND r.expires_at > now()
+    AND r.lat BETWEEN p_min_lat AND p_max_lat AND r.lng BETWEEN p_min_lng AND p_max_lng
+    AND NOT private.is_blocked(uid, r.created_by)
+  ORDER BY abs(r.lat - (p_min_lat + p_max_lat) / 2) + abs(r.lng - (p_min_lng + p_max_lng) / 2)
+  LIMIT 300;
+END $$;
+
+-- Moderation: take a road report off the map (closes the abuse reports about it, a strike for its author).
+CREATE FUNCTION public.admin_remove_road_report(p_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+DECLARE uid uuid := private.admin_me();
+BEGIN
+  PERFORM private.road_remove(p_id, uid);
+  UPDATE public.reports SET resolved_at = now(), resolved_by = uid, resolution = 'removed'
+  WHERE kind = 'road' AND target_id = p_id AND resolved_at IS NULL;
+END $$;
+
+-- Expired a day ago (and no open abuse report about it): deleted; strikes after a week.
+CREATE FUNCTION private.expire_road()
+RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$
+  DELETE FROM private.road_reports r
+  WHERE least(r.expires_at, coalesce(r.removed_at, r.expires_at)) < now() - interval '1 day'
+    AND NOT EXISTS (SELECT 1 FROM public.reports a WHERE a.kind = 'road' AND a.target_id = r.id AND a.resolved_at IS NULL);
+  DELETE FROM private.road_strikes WHERE at < now() - interval '7 days';
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 12. Privileges
 -- ---------------------------------------------------------------------------
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
@@ -1217,6 +1398,7 @@ BEGIN
     PERFORM cron.schedule('expire-nearby', '39 * * * *', 'SELECT private.expire_nearby()');
     PERFORM cron.schedule('expire-walkie', '37 * * * *', 'SELECT private.expire_walkie()');
     PERFORM cron.schedule('expire-misc', '41 3 * * *', 'SELECT private.expire_misc()');
+    PERFORM cron.schedule('expire-road', '*/15 * * * *', 'SELECT private.expire_road()');
   ELSE
     RAISE NOTICE 'pg_cron not available: run the private.expire_* jobs another way';
   END IF;

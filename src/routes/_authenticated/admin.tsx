@@ -8,7 +8,7 @@ import { AppHeader } from "@/components/app-header";
 import { Segmented } from "@/components/segmented";
 import { UserAvatar } from "@/components/user-avatar";
 import { base64ToBlob, player } from "@/lib/audio";
-import { adminReports, amIAdmin, moderationKeys, reportAudio, resolveReport, setDisabled, type AdminReport } from "@/lib/moderation";
+import { adminReports, amIAdmin, moderationKeys, removeRoadReport, reportAudio, resolveReport, setDisabled, type AdminReport } from "@/lib/moderation";
 import { timeAgoShort } from "@/lib/time-ago";
 
 export const Route = createFileRoute("/_authenticated/admin")({
@@ -30,6 +30,12 @@ function AdminPage() {
   const resolve = useMutation({
     mutationFn: ({ r, action }: { r: AdminReport; action: "dismiss" | "disable" }) => resolveReport(r.id, action),
     onSuccess: (_d, v) => toast(t(v.action === "dismiss" ? "admin.dismissed" : "admin.disabled")),
+    onError: () => toast.error(t("errors.generic")),
+    onSettled: refresh,
+  });
+  const removeRoad = useMutation({
+    mutationFn: (id: string) => removeRoadReport(id),
+    onSuccess: () => toast(t("admin.resolution.removed")),
     onError: () => toast.error(t("errors.generic")),
     onSettled: refresh,
   });
@@ -66,7 +72,9 @@ function AdminPage() {
                     {r.target_full_name || r.target_username} <span className="font-normal text-muted-foreground">@{r.target_username}</span>
                   </Link>
                   <p className="text-caption text-muted-foreground">
-                    {t(`admin.kind.${r.kind}`)} · {t(`report.reasons.${r.reason}`, { defaultValue: r.reason || "—" })} · {timeAgoShort(r.created_at, i18n.language)}
+                    {t(`admin.kind.${r.kind}`)}
+                    {r.road_kind ? ` (${t(`road.kinds.${r.road_kind}`, { defaultValue: r.road_kind })})` : ""} ·{" "}
+                    {t(`report.reasons.${r.reason}`, { defaultValue: r.reason || "—" })} · {timeAgoShort(r.created_at, i18n.language)}
                     {r.reporter_username ? ` · @${r.reporter_username}` : ""}
                   </p>
                   <p className="text-caption">
@@ -80,6 +88,16 @@ function AdminPage() {
                 {r.has_audio && (
                   <button type="button" onClick={() => void listen(r)} className="flex h-10 items-center gap-1.5 rounded-full border border-border bg-background px-4 text-caption font-semibold">
                     <Play className="h-4 w-4" /> {t("admin.listen")}
+                  </button>
+                )}
+                {!r.resolved_at && r.kind === "road" && r.target_id && (
+                  <button
+                    type="button"
+                    disabled={removeRoad.isPending}
+                    onClick={() => removeRoad.mutate(r.target_id!)}
+                    className="h-10 rounded-full border border-border bg-background px-4 text-caption font-semibold disabled:opacity-60"
+                  >
+                    {t("admin.removeRoad")}
                   </button>
                 )}
                 {!r.resolved_at && (

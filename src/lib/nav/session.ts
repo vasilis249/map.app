@@ -81,6 +81,12 @@ const anyoneTalking = () => walkieHub.peers().some(({ snap }) => snap.talking ||
 let planSeq = 0;
 let stopTrip: (() => void) | null = null;
 let silence: (() => void) | null = null;
+let extra: ((key: string, text: string) => void) | null = null;
+
+/** Say something besides the turn-by-turn (a road report ahead) through the same voice: muted, waits for talks. */
+export function announce(key: string, text: string) {
+  extra?.(key, text);
+}
 
 /** Routes from where you are to a place (the preview with choices). */
 export async function planTo(dest: Place, from: LatLng, lang: string) {
@@ -114,6 +120,9 @@ export function startNav(texts: NavTexts, lang: string) {
   /** Which route an announcement was about (a waiting "turn left" of the old route is dropped after a reroute). */
   let generation = 0;
   silence = () => voice.clear();
+  extra = (key, text) => {
+    if (!state.muted) voice.say({ key, text });
+  };
   let arrivedTimer: ReturnType<typeof setTimeout> | null = null;
 
   const motion = createMotion();
@@ -180,6 +189,7 @@ export function startNav(texts: NavTexts, lang: string) {
     keepAwake(false);
     if (arrivedTimer) clearTimeout(arrivedTimer);
     silence = null;
+    extra = null;
   };
   set({ phase: "navigating", route: nav.route, progress: null, rerouting: false, error: null, muted: readMuted(), fix: null, motion, speedKmh: null });
 }

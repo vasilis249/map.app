@@ -4,11 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 export interface AdminReport {
   id: string;
   created_at: string;
-  kind: "user" | "walkie" | "nearby";
+  kind: "user" | "walkie" | "nearby" | "road";
   reason: string;
   target_id: string | null;
   resolved_at: string | null;
-  resolution: "dismissed" | "disabled" | null;
+  resolution: "dismissed" | "disabled" | "removed" | null;
   reporter_id: string | null;
   reporter_username: string | null;
   target_user_id: string;
@@ -18,6 +18,8 @@ export interface AdminReport {
   target_disabled: boolean;
   target_open_reports: number;
   has_audio: boolean;
+  /** For a road report: what it says (accident, police…), while it still exists. */
+  road_kind: string | null;
 }
 
 export const moderationKeys = {
@@ -56,4 +58,9 @@ export async function reportAudio(id: string): Promise<{ mime: string; audio_b64
   const row = (data ?? [])[0];
   if (!row) throw new Error("not_available");
   return row;
+}
+
+/** Take a reported road report off the map (closes the abuse reports about it). */
+export async function removeRoadReport(id: string) {
+  fail((await supabase.rpc("admin_remove_road_report", { p_id: id })).error);
 }
