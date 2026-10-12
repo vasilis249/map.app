@@ -270,6 +270,7 @@ export type Database = {
       map_people: { Args: { p_radius_m?: number }; Returns: { user_id: string; username: string; full_name: string; avatar_path: string; lat: number; lng: number; accuracy_m: number; heading: number; updated_at: string; distance_m: number; is_friend: boolean; can_talk: boolean }[] };
       my_blocked: { Args: Record<PropertyKey, never>; Returns: { id: string; username: string; full_name: string; avatar_path: string }[] };
       my_location_sharing: { Args: Record<PropertyKey, never>; Returns: { mode: string; talk_from: string; has_position: boolean; position_at: string; lat: number; lng: number; accuracy_m: number }[] };
+      nav_quota: { Args: { p_kind: string }; Returns: undefined };
       nearby_audio: { Args: { p_id: string }; Returns: { mime: string; audio_b64: string }[] };
       nearby_history: { Args: { p_other: string; p_limit?: number }; Returns: { id: string; sender_id: string; duration_ms: number; created_at: string }[] };
       nearby_knock: { Args: { p_to: string }; Returns: undefined };

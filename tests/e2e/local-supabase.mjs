@@ -1,11 +1,12 @@
 // Local "mini Supabase" for browser tests: proxies /rest/v1 to PostgREST (real RLS on the local Postgres), a small
 // GoTrue for email + password (sign up, sign in, refresh, user, sign out — our own HS256 JWTs; accounts via the
 // local-only SQL in local_auth.sql), Storage emulation (object rows in storage.objects with RLS through PostgREST,
-// bytes on disk) and the Realtime mock (realtime-mock.mjs).
+// bytes on disk), the Realtime mock (realtime-mock.mjs) and the routing / search provider mock (routing-mock.mjs).
 import http from "node:http";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { attachRealtime } from "./realtime-mock.mjs";
+import { routing } from "./routing-mock.mjs";
 
 export const SECRET = "local-dev-secret-local-dev-secret-0123456789";
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
@@ -128,6 +129,7 @@ if (process.argv[1]?.endsWith("local-supabase.mjs")) {
       const bearer = (req.headers.authorization || "").replace("Bearer ", "");
 
       if (url.pathname.startsWith("/auth/v1/")) return void auth(req, res, url, bearer);
+      if (url.pathname.startsWith("/routing/")) return void routing(req, res, url);
       // Storage emulation. Object rows live in storage.objects (RLS enforced through PostgREST
       // with the caller's JWT); file bytes in FILES.
       const rest = (method, path, body, profile = "storage", prefer = "return=representation") =>

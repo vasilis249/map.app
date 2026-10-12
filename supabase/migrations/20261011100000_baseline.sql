@@ -1137,6 +1137,27 @@ BEGIN
 END $$;
 
 -- ---------------------------------------------------------------------------
+-- 11c. Navigation quota. Routing and place search go through our Worker (src/lib/nav/api.server.ts), which holds the
+-- provider key; before each call it asks this with the caller's own JWT: signed in, allowed (private.me), and within
+-- the per-user limits (a reroute is at most one call per 10 s; search is debounced on the phone).
+-- Raises not_allowed / age_not_confirmed / rate_limited (HINT = which limit) / bad_input.
+-- ---------------------------------------------------------------------------
+CREATE FUNCTION public.nav_quota(p_kind text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
+BEGIN
+  PERFORM private.me();
+  IF p_kind = 'route' THEN
+    PERFORM private.rate_limit('nav_route', 60, interval '10 minutes');
+    PERFORM private.rate_limit('nav_route_day', 500, interval '1 day');
+  ELSIF p_kind = 'search' THEN
+    PERFORM private.rate_limit('nav_search', 150, interval '10 minutes');
+    PERFORM private.rate_limit('nav_search_day', 1500, interval '1 day');
+  ELSE
+    RAISE EXCEPTION 'bad_input' USING ERRCODE = '22023';
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
 -- 12. Privileges
 -- ---------------------------------------------------------------------------
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
