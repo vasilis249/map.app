@@ -301,3 +301,16 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   read inside a loop needs a short timeout (Playwright waits 30 s for a missing one).
 - Not verified: real drivers and many simultaneous users, reports on a real moving phone (speed / course from GPS),
   the right warning distance on highways in practice; push notifications for reports (none: only in the app).
+
+### P6 — hardening + release (done in the container; Xcode / App Store / device steps pending, awaiting OK)
+- SQL: new suite hardening 15 (RLS on every table, definer search_path, anon / authenticated grants, only allowed
+  direct updates, delete my account wipes everything — also when disabled —, others untouched, own-folder photo
+  listing) → 207 PASS in all. Unit 37. Browser: new flow `release` 12 (privacy / terms without an account from
+  sign-up, old photo removed, no polling for 15 s in the background and resuming after, delete account → every row and
+  file gone, sign-in fails); whole suite PASS: auth 23, map 27, social 25, walkie 12 + 7 + 6 + 13 + 5, nearby 16,
+  nav 38, reports 17, release 12 (201 checks, no page errors).
+- Found and fixed: every profile photo change left the old photo public forever (now removed); the storage list
+  needed an own-folder policy. Bundle guard checked against an eager MapLibre import (refused: 481 KB > 300 KB).
+- Not verified: Xcode build with the privacy manifest + new icon / splash on a device, App Store Connect, the legal
+  texts (drafts — lawyer + entity), battery on a real phone, Supabase's own behaviour for deleting an auth user from
+  SQL on the hosted project (works on the local stub; the hosted project must be checked once).
