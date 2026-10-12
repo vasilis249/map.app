@@ -23,6 +23,7 @@ npm run test:e2e            # browser flows: builds against the local stack, ser
 npm run db:types            # regenerate src/integrations/supabase/types.ts from supabase/migrations (no Docker)
 npm run deploy              # build + bundle guard (scripts/check-bundle.mjs) + wrangler deploy
 npm run ios:sync            # patch native plugins + cap sync ios (then open ios/App in Xcode on a Mac)
+node scripts/make-icons.mjs # app icon (1024, opaque), splash (2732) and web icons from design/icon.svg
 ```
 
 ## Stack and architecture
@@ -178,6 +179,22 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   "still there?" within 40 m, once each, not for your own / voted), pins on the map (≤ 2 km, or the route's box while
   navigating; 30 s refresh), a big orange report button → 5 big tiles (one tap, no typing), warning chip + voice
   through the guidance queue (muted / waits for talks like guidance), "still there?" card with big 👍 / 👎 (10 s).
+- D23 (P6) Account deletion in the app (App Store 5.1.1(v)): Profile → "Διαγραφή λογαριασμού" (also on the suspended
+  and 18+ screens): the app removes the user's photos through the Storage API, then `delete_my_account()` deletes the
+  auth user (not private.me(): disabled / not-yet-18 accounts can delete too) → everything cascades; reports they
+  made stay for moderation with reporter_id NULL. Changing the profile photo removes the old ones (they'd stay public by
+  URL); `avatars_list_own` lets you list only your own folder.
+- D24 (P6) Legal: privacy policy + terms are DRAFTS in `src/legal/content.ts` (el / en, written from the real
+  retention times and providers), public pages `/privacy` and `/terms`, linked from sign-up and the profile; legal
+  entity placeholders in `src/lib/brand.ts` (`LEGAL`). Lawyer review + entity are release blockers
+  (`docs/release/CHECKLIST.md`). App Store labels / review notes: `docs/release/APP-STORE.md`; iOS privacy manifest
+  `ios/App/App/PrivacyInfo.xcprivacy` (added to the target in project.pbxproj).
+- D25 (P6) Hardening rules are tests: `test_hardening.sql` fails when any table lacks RLS, a SECURITY DEFINER function
+  lacks `search_path = ''`, anon can touch a table / call a function, a private helper beyond the 3 RLS ones is
+  callable, or a direct INSERT / DELETE / UPDATE (beyond the profile's editable columns and notifications.read_at)
+  appears. Performance: the deploy guard keeps first-load JS ≤ 300 KB gzipped and MapLibre / three.js lazy; polling
+  stops in the background (TanStack Query's default, checked by the `release` flow).
+- Icon (P6): `design/icon.svg` (navigation arrow + voice waves, no name), rendered by `scripts/make-icons.mjs`.
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
