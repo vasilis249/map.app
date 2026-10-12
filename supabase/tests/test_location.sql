@@ -213,3 +213,24 @@ SELECT pg_temp.ok('10a a friend who blocks you: gone from your map and you from 
 RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
 SELECT pg_temp.ok('10b … from your side too', NOT EXISTS (SELECT 1 FROM public.map_people() WHERE user_id = :D));
 RESET ROLE;
+
+-- 11 cars and pedestrians: others see only "in a vehicle (≤ 5 min ago)", never the speed
+UPDATE private.user_locations SET updated_at = now() - interval '2 seconds' WHERE user_id = :B;
+SELECT pg_temp.as_user(:B); SET ROLE authenticated;
+SELECT public.update_my_location(37.97640, 23.73480, 8, 90, 12);
+RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('11a moving at 12 m/s: shown as in a vehicle',
+  (SELECT in_vehicle FROM public.map_people() WHERE user_id = :B));
+RESET ROLE;
+UPDATE private.user_locations SET updated_at = now() - interval '2 seconds' WHERE user_id = :B;
+SELECT pg_temp.as_user(:B); SET ROLE authenticated;
+SELECT public.update_my_location(37.97640, 23.73480, 8, NULL, 0);
+RESET ROLE; SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('11b stopped at a red light: still a vehicle', (SELECT in_vehicle FROM public.map_people() WHERE user_id = :B));
+RESET ROLE;
+UPDATE private.user_locations SET vehicle_at = now() - interval '6 minutes' WHERE user_id = :B;
+SELECT pg_temp.as_user(:A); SET ROLE authenticated;
+SELECT pg_temp.ok('11c no vehicle speed for 5 minutes: a pedestrian again', (SELECT NOT in_vehicle FROM public.map_people() WHERE user_id = :B));
+RESET ROLE;
+SELECT pg_temp.ok('11d map_people never returns the speed itself',
+  (SELECT NOT ('speed' = ANY (proargnames)) FROM pg_proc WHERE proname = 'map_people'));

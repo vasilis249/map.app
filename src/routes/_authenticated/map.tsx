@@ -7,7 +7,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/compone
 import { GhostButton } from "@/components/location/ghost-button";
 import { LiveMap, type MapFocus } from "@/components/map/live-map";
 import { NearbyTalk } from "@/components/map/nearby-talk";
-import { NavBanner, NavFooter, RoutePreview } from "@/components/nav/nav-ui";
+import { NavBanner, NavFooter, RoutePreview, SpeedBubble } from "@/components/nav/nav-ui";
 import { NavSearch } from "@/components/nav/nav-search";
 import { spokenDistance } from "@/lib/nav/format";
 import type { Place } from "@/lib/nav/route";
@@ -102,7 +102,15 @@ function MapPage() {
   const [view, setView] = useState<View>("friends");
   const [radius, setRadius] = useState<number>(NEAR_M);
   const on = !!sharing.data && sharing.data.mode !== "off";
-  const people = useQuery({ queryKey: locationKeys.people(radius), queryFn: () => mapPeople(radius), enabled: on, refetchInterval: 5_000 });
+  // Navigation (P4): planning a trip (search → route choices) or following one.
+  const nav = useNav();
+  // While navigating, people around you refresh every 2 s (their 3D cars glide between updates), else every 5 s.
+  const people = useQuery({
+    queryKey: locationKeys.people(radius),
+    queryFn: () => mapPeople(radius),
+    enabled: on,
+    refetchInterval: nav.phase === "navigating" ? 2_000 : 5_000,
+  });
   const { u } = Route.useSearch();
   const navigate = useNavigate({ from: "/map" });
   const [listOpen, setListOpen] = useState(false);
@@ -118,8 +126,6 @@ function MapPage() {
     .map((p) => p.peer);
   const local = useLocalFix();
   const compass = useCompass();
-  // Navigation (P4): planning a trip (search → route choices) or following one.
-  const nav = useNav();
   const [searching, setSearching] = useState(false);
   const navActive = nav.phase === "navigating" || nav.phase === "arrived";
   const planning = nav.phase === "loading" || nav.phase === "preview";
@@ -202,7 +208,7 @@ function MapPage() {
         lang={i18n.language}
         nav={
           navActive && nav.route && nav.dest
-            ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null }
+            ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion }
             : planning && nav.dest
               ? { lines: nav.routes.map((r) => r.points), chosen: nav.chosen, dest: nav.dest, mode: "preview", bearing: null, onChoose: chooseRoute }
               : null
@@ -276,7 +282,10 @@ function MapPage() {
       <div className="pointer-events-none absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6.5rem)] z-10 flex flex-col gap-3 px-4 [&>*:not(.pass-through)]:pointer-events-auto">
         {/* ghost mode (one tap) · back to me */}
         <div className="pass-through flex items-end justify-between gap-3">
-          {s ? <GhostButton sharing={s} /> : <span />}
+          <div className="flex items-end gap-2">
+            {navActive && <SpeedBubble kmh={nav.speedKmh} />}
+            {s ? <GhostButton sharing={s} /> : <span />}
+          </div>
           {me && (
             <button
               type="button"

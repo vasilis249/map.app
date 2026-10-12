@@ -274,6 +274,9 @@ CREATE TABLE private.user_locations (
   accuracy_m real,
   heading real,
   speed real,
+  -- Last time this person moved at vehicle speed (> 5 m/s): the map draws them as a car for 5 minutes after (a red
+  -- light, a traffic jam), else as a pedestrian. Only this coarse flag is shown to others, never the speed itself.
+  vehicle_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX user_locations_box ON private.user_locations (lat, lng);
@@ -319,15 +322,16 @@ BEGIN
     RAISE EXCEPTION 'bad_location' USING ERRCODE = '22023';
   END IF;
   IF coalesce((SELECT mode FROM public.location_sharing WHERE user_id = uid), 'off') = 'off' THEN RETURN false; END IF;
-  INSERT INTO private.user_locations AS l (user_id, lat, lng, accuracy_m, heading, speed, updated_at)
+  INSERT INTO private.user_locations AS l (user_id, lat, lng, accuracy_m, heading, speed, vehicle_at, updated_at)
   VALUES (uid, p_lat, p_lng,
           CASE WHEN p_accuracy >= 0 AND p_accuracy < 100000 THEN p_accuracy END,
           CASE WHEN p_heading >= 0 AND p_heading < 360 THEN p_heading END,
           CASE WHEN p_speed >= 0 AND p_speed < 150 THEN p_speed END,
+          CASE WHEN p_speed > 5 AND p_speed < 150 THEN now() END,
           now())
   ON CONFLICT (user_id) DO UPDATE
     SET lat = EXCLUDED.lat, lng = EXCLUDED.lng, accuracy_m = EXCLUDED.accuracy_m, heading = EXCLUDED.heading,
-        speed = EXCLUDED.speed, updated_at = now()
+        speed = EXCLUDED.speed, vehicle_at = coalesce(EXCLUDED.vehicle_at, l.vehicle_at), updated_at = now()
     WHERE l.updated_at < now() - interval '900 milliseconds';
   RETURN true;
 END $$;
@@ -450,7 +454,7 @@ END $$;
 CREATE FUNCTION public.map_people(p_radius_m int DEFAULT 200)
 RETURNS TABLE (user_id uuid, username text, full_name text, avatar_path text, lat double precision,
                lng double precision, accuracy_m real, heading real, updated_at timestamptz, distance_m int,
-               is_friend boolean, can_talk boolean)
+               is_friend boolean, can_talk boolean, in_vehicle boolean)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = '' AS $$
 DECLARE
   uid uuid := private.me();
@@ -483,7 +487,8 @@ BEGIN
          c.friend,
          (c.dist <= near AND c.updated_at > now() - interval '15 minutes' AND me_fresh
           AND (c.talk_from = 'everyone' OR (c.talk_from = 'following' AND private.follows(c.user_id, uid))))
-           OR private.knocked_recently(c.user_id, uid)
+           OR private.knocked_recently(c.user_id, uid),
+         coalesce(c.vehicle_at > now() - interval '5 minutes', false)
   FROM cand c JOIN public.profiles p ON p.id = c.user_id
   WHERE (c.friend AND c.mode IN ('friends', 'everyone'))
      OR (c.mode = 'everyone' AND me_fresh AND c.updated_at > now() - interval '15 minutes'

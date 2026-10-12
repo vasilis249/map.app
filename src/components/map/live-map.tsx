@@ -6,6 +6,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import maplibreWorkerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { avatarUrl } from "@/lib/avatar";
 import { themeStyle } from "./map-theme";
+import type { Motion } from "@/lib/nav/motion";
+import { createPeople3d, PEOPLE_3D_LAYER, type Figure } from "./people-3d";
 import type { MapPerson } from "@/lib/location/api";
 
 /**
@@ -70,6 +72,8 @@ export interface MapNav {
   mode: "preview" | "follow";
   /** Direction to face in follow mode (your course, else the route's). */
   bearing: number | null;
+  /** Follow mode: smooth 60 fps arrow + camera between fixes (lib/nav/motion.ts); the line is trimmed behind you. */
+  motion?: Motion | null;
   onChoose?: (i: number) => void;
 }
 
@@ -139,11 +143,15 @@ function glide(marker: Marker & { __anim?: number }, to: [number, number]) {
   marker.__anim = requestAnimationFrame(step);
 }
 
-function personElement(p: MapPerson, talking: boolean, age: string | null, onSelect: (p: MapPerson) => void): HTMLElement {
+function personElement(p: MapPerson, talking: boolean, age: string | null, onSelect: (p: MapPerson) => void, compact = false): HTMLElement {
   const name = p.full_name || p.username;
   const wrap = document.createElement("div");
   wrap.className = `relative h-12 w-12 ${age && !talking ? "opacity-60" : ""}`;
   if (talking) wrap.dataset.talking = "1";
+  // Compact while navigating: a small photo floating above their 3D car / figure, no name tag. (The scale goes on an
+  // inner box: on the marker element itself it would also scale MapLibre's positioning transform.)
+  const inner = document.createElement("div");
+  inner.className = `relative h-12 w-12 ${compact ? "scale-[0.7]" : ""}`;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.setAttribute("aria-label", name);
@@ -165,7 +173,9 @@ function personElement(p: MapPerson, talking: boolean, age: string | null, onSel
   label.className =
     "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap glass rounded-full border border-border/60 px-2 py-0.5 text-[11px] font-semibold text-foreground";
   label.textContent = age ? `${name.split(" ")[0]} · ${age}` : name.split(" ")[0];
-  wrap.append(btn, label);
+  inner.append(btn);
+  if (!compact) inner.append(label);
+  wrap.append(inner);
   return wrap;
 }
 
@@ -253,6 +263,9 @@ export function LiveMap({
   // Follow mode paused because you moved the map yourself (the recenter button resumes it).
   const navFree = useRef(false);
   const framedKey = useRef<string | null>(null);
+  // The 3D people layer (three.js, loaded on the first navigation).
+  const people3d = useRef<{ api: Awaited<ReturnType<typeof createPeople3d>> } | null>(null);
+  const people3dLoading = useRef(false);
 
   // Create the map once.
   useEffect(() => {
@@ -270,6 +283,8 @@ export function LiveMap({
         zoom: start ? ME_ZOOM : 11,
         attributionControl: { compact: true },
         pitchWithRotate: false,
+        // The close 3D view at a red light tilts past MapLibre's default 60°.
+        maxPitch: 70,
         dragRotate: false,
       });
       m.touchZoomRotate.disableRotation();
@@ -331,6 +346,12 @@ export function LiveMap({
       media?.addEventListener("change", onScheme);
       schemeOff.current = () => media?.removeEventListener("change", onScheme);
       map.current = m;
+      // Tests / debugging only: the map instance, when this device opted in (localStorage "mapapp:debugMap").
+      try {
+        if (localStorage.getItem("mapapp:debugMap") === "1") (window as unknown as { __map?: MlMap }).__map = m;
+      } catch {
+        // storage blocked: no debug hook
+      }
       sync();
     });
     return () => {
@@ -339,6 +360,8 @@ export function LiveMap({
       map.current?.remove();
       map.current = null;
       all.clear();
+      if (loop.current != null) cancelAnimationFrame(loop.current);
+      loop.current = null;
       meMarker.current = null;
       destMarker.current = null;
       framedKey.current = null;
@@ -401,6 +424,36 @@ export function LiveMap({
       destMarker.current = null;
     }
     navCamera();
+    if (n?.mode === "follow" && n.motion) followLoop();
+    show3d(n?.mode === "follow");
+  }
+
+  /** Put the 3D people layer on the map while following a route (loading three.js the first time), off otherwise. */
+  function show3d(on: boolean) {
+    const m = map.current;
+    const ml = lib.current;
+    if (!m || !ml || !styleReady.current) return;
+    const has = !!m.getLayer(PEOPLE_3D_LAYER);
+    if (!on) {
+      if (has) m.removeLayer(PEOPLE_3D_LAYER);
+      people3d.current?.api.set([]);
+      return;
+    }
+    if (has) return;
+    if (people3d.current) {
+      m.addLayer(people3d.current.api.layer);
+      sync();
+      return;
+    }
+    if (people3dLoading.current) return;
+    people3dLoading.current = true;
+    void createPeople3d(ml)
+      .then((api) => {
+        people3d.current = { api };
+        show3d(latest.current.nav?.mode === "follow");
+      })
+      .catch(() => undefined)
+      .finally(() => (people3dLoading.current = false));
   }
 
   /** Preview: frame all routes once. Follow: you, low on the screen, facing your way, tilted. Off: flat again. */
@@ -433,6 +486,7 @@ export function LiveMap({
       return;
     }
     framedKey.current = "follow";
+    if (n.motion) return; // the frame loop (followLoop) moves the camera
     if (navFree.current || !pos) return;
     const h = m.getContainer().clientHeight;
     m.easeTo({
@@ -440,12 +494,65 @@ export function LiveMap({
       zoom: NAV_ZOOM,
       pitch: NAV_PITCH,
       bearing: n.bearing ?? m.getBearing(),
-      // You sit a little below the middle of what's visible between the banner (top) and the controls (bottom),
-      // so more of the road ahead shows.
       padding: { top: h * 0.3, bottom: h * 0.2, left: 0, right: 0 },
       duration: 900,
       essential: true,
     });
+  }
+
+  /**
+   * Following a route: every animation frame, the arrow and the camera go where the motion model says (one jumpTo per
+   * frame — no overlapping animations fighting each other), and a few times a second the route line is trimmed to
+   * what's ahead of the arrow. Stops by itself when navigation ends.
+   */
+  const loop = useRef<number | null>(null);
+  function followLoop() {
+    if (loop.current != null) return;
+    let n = 0;
+    let lastCam: { lat: number; lng: number; bearing: number; zoom: number; pitch: number } | null = null;
+    const tick = () => {
+      const m = map.current;
+      const nav = latest.current.nav;
+      if (!m || nav?.mode !== "follow" || !nav.motion) {
+        loop.current = null;
+        return;
+      }
+      loop.current = requestAnimationFrame(tick);
+      const f = nav.motion.frame(Date.now());
+      if (!f) return;
+      const mk = meMarker.current;
+      if (mk?.sig === "puck") mk.marker.setLngLat([f.lng, f.lat]).setRotation(f.bearing);
+      // Nothing moved (standing at a light, settled): no new frame — the map stays idle and saves battery.
+      const prevCam = lastCam;
+      lastCam = f;
+      const settled =
+        prevCam &&
+        Math.abs(prevCam.lat - f.lat) < 1e-7 &&
+        Math.abs(prevCam.lng - f.lng) < 1e-7 &&
+        Math.abs(prevCam.bearing - f.bearing) < 0.05 &&
+        Math.abs(prevCam.zoom - f.zoom) < 0.002 &&
+        Math.abs(prevCam.pitch - f.pitch) < 0.05;
+      if (!navFree.current && !settled) {
+        const h = m.getContainer().clientHeight;
+        // You sit a little below the middle of what's visible between the banner (top) and the controls (bottom),
+        // so more of the road ahead shows.
+        m.jumpTo({ center: [f.lng, f.lat], zoom: f.zoom, pitch: f.pitch, bearing: f.bearing, padding: { top: h * 0.3, bottom: h * 0.2, left: 0, right: 0 } });
+      }
+      if (++n % 12 === 0) {
+        const ahead = nav.motion.ahead();
+        if (ahead && styleReady.current)
+          (m.getSource("nav") as { setData: (d: unknown) => void } | undefined)?.setData({
+            type: "FeatureCollection",
+            features: [{ type: "Feature", properties: { idx: 0, chosen: true }, geometry: { type: "LineString", coordinates: ahead } }],
+          });
+        if (box.current) {
+          box.current.dataset.zoom = f.zoom.toFixed(1);
+          box.current.dataset.frames = String(n);
+          box.current.dataset.figures = String(m.getLayer(PEOPLE_3D_LAYER) ? (people3d.current?.api.count() ?? 0) : 0);
+        }
+      }
+    };
+    loop.current = requestAnimationFrame(tick);
   }
 
   function frameRadius(animate: boolean) {
@@ -482,7 +589,7 @@ export function LiveMap({
           meMarker.current = { marker: new ml.Marker({ element: el }).setLngLat([pos.lng, pos.lat]).addTo(m), sig, beam };
         }
         pointBeam();
-      } else glide(meMarker.current.marker, [pos.lng, pos.lat]);
+      } else if (!(puck && latest.current.nav?.motion)) glide(meMarker.current.marker, [pos.lng, pos.lat]);
       const kind = pos.live ? "live" : "stored";
       if (placed.current === "none" || (placed.current === "stored" && kind === "live" && !userMoved.current)) {
         placed.current = kind;
@@ -490,13 +597,21 @@ export function LiveMap({
         else m.jumpTo({ center: [pos.lng, pos.lat], zoom: ME_ZOOM });
       }
     }
-    // everyone else
+    // everyone else (while navigating: also as 3D cars / pedestrians)
+    const following3d = latest.current.nav?.mode === "follow";
+    people3d.current?.api.set(
+      following3d
+        ? list
+            .filter((p) => p.lat || p.lng)
+            .map((p): Figure => ({ id: p.user_id, lat: p.lat, lng: p.lng, heading: p.heading, vehicle: !!p.in_vehicle, tint: live.includes(p.user_id) ? "talking" : p.is_friend ? "friend" : "other" }))
+        : [],
+    );
     const seen = new Set<string>();
     for (const p of list) {
       seen.add(p.user_id);
       const talks = live.includes(p.user_id);
       const old = age(p);
-      const sig = `${p.avatar_path}|${p.is_friend}|${p.full_name}|${talks}|${old}`;
+      const sig = `${p.avatar_path}|${p.is_friend}|${p.full_name}|${talks}|${old}|${following3d}`;
       const cur = markers.current.get(p.user_id);
       if (cur && cur.sig === sig) {
         glide(cur.marker, [p.lng, p.lat]);
@@ -504,7 +619,9 @@ export function LiveMap({
       }
       const at = cur ? cur.marker.getLngLat() : null;
       cur?.marker.remove();
-      const marker = new ml.Marker({ element: personElement(p, talks, old, select) }).setLngLat(at ? [at.lng, at.lat] : [p.lng, p.lat]).addTo(m);
+      const marker = new ml.Marker({ element: personElement(p, talks, old, select, following3d), offset: following3d ? [0, -42] : [0, 0] })
+        .setLngLat(at ? [at.lng, at.lat] : [p.lng, p.lat])
+        .addTo(m);
       if (at) glide(marker, [p.lng, p.lat]);
       markers.current.set(p.user_id, { marker, sig });
     }
@@ -537,8 +654,9 @@ export function LiveMap({
     const cur = meMarker.current;
     const h = headingRef.current;
     if (cur && !cur.beam) {
-      // The navigation arrow: turned in map degrees (MapLibre adds the map's own rotation).
-      if (h != null) cur.marker.setRotation(h);
+      // The navigation arrow: turned in map degrees (MapLibre adds the map's own rotation); with a motion model the
+      // frame loop turns it.
+      if (h != null && !latest.current.nav?.motion) cur.marker.setRotation(h);
       return;
     }
     const b = cur?.beam;

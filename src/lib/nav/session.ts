@@ -2,6 +2,8 @@ import { useSyncExternalStore } from "react";
 import { walkieHub } from "@/lib/walkie/hub";
 import { fetchRoutes, NavApiError, type NavError } from "./api";
 import type { LatLng } from "./geo";
+import { bearing as bearingOf, haversine } from "./geo";
+import { createMotion, type Motion } from "./motion";
 import { createNavigator } from "./navigator";
 import { watchNavigation } from "./nav-location";
 import type { NavFix, NavProgress } from "./progress";
@@ -31,6 +33,10 @@ export interface NavState {
   muted: boolean;
   /** Last fix used (the camera follows it). */
   fix: NavFix | null;
+  /** Smooth motion for the map (60 fps arrow and camera between fixes). */
+  motion: Motion | null;
+  /** Current speed, km/h (from the device, else from the last two fixes). */
+  speedKmh: number | null;
 }
 
 export interface NavTexts {
@@ -49,7 +55,7 @@ const readMuted = () => {
   }
 };
 
-const IDLE: NavState = { phase: "idle", dest: null, routes: [], chosen: 0, error: null, route: null, progress: null, rerouting: false, muted: false, fix: null };
+const IDLE: NavState = { phase: "idle", dest: null, routes: [], chosen: 0, error: null, route: null, progress: null, rerouting: false, muted: false, fix: null, motion: null, speedKmh: null };
 let state: NavState = IDLE;
 const listeners = new Set<() => void>();
 function set(patch: Partial<NavState>) {
@@ -110,8 +116,13 @@ export function startNav(texts: NavTexts, lang: string) {
   silence = () => voice.clear();
   let arrivedTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const onFix = (fix: NavFix) => {
+  const motion = createMotion();
+  let prev: NavFix | null = null;
+  const onFix = (raw: NavFix) => {
     if (ended) return;
+    const fix = withMotion(raw, prev);
+    // (a repeat of the same fix a moment later must not become the base for the next speed)
+    if (!prev || fix.t - prev.t >= 400) prev = fix;
     const u = nav.update(fix);
     const p = u.progress;
     if (u.say && !state.muted) {
@@ -136,7 +147,18 @@ export function startNav(texts: NavTexts, lang: string) {
           if (!ended) set({ rerouting: false });
         });
     }
-    set({ progress: p, fix, route: nav.route });
+    motion.update({
+      route: nav.route,
+      along: p.along,
+      onRoute: !p.offRoute,
+      lat: fix.lat,
+      lng: fix.lng,
+      course: fix.course ?? null,
+      speed: fix.speed ?? 0,
+      toNext: p.toNext,
+      t: fix.t,
+    });
+    set({ progress: p, fix, route: nav.route, speedKmh: kmh(fix.speed) });
     if (p.arrived && state.phase === "navigating") {
       set({ phase: "arrived" });
       // The trip ends by itself a little after arriving (or with "Τέλος").
@@ -144,17 +166,22 @@ export function startNav(texts: NavTexts, lang: string) {
     }
   };
 
+  // No fix for a few seconds = standing still (iPhones send nothing then): the speedometer drops to 0.
+  const idle = setInterval(() => {
+    if (prev && Date.now() - prev.t > 3_000 && state.speedKmh) set({ speedKmh: 0 });
+  }, 1_000);
   const stopWatch = watchNavigation({ title: texts.bgTitle, message: texts.bgMessage }, onFix);
   stopTrip = () => {
     ended = true;
     stopWatch();
+    clearInterval(idle);
     offTalk();
     voice.clear();
     keepAwake(false);
     if (arrivedTimer) clearTimeout(arrivedTimer);
     silence = null;
   };
-  set({ phase: "navigating", route: nav.route, progress: null, rerouting: false, error: null, muted: readMuted(), fix: null });
+  set({ phase: "navigating", route: nav.route, progress: null, rerouting: false, error: null, muted: readMuted(), fix: null, motion, speedKmh: null });
 }
 
 export function stopNav() {
@@ -172,4 +199,30 @@ export function setMuted(muted: boolean) {
   }
   if (muted) silence?.();
   set({ muted });
+}
+
+/**
+ * Speed and direction when the device doesn't give them (browsers, some fixes): from the previous fix, if it is recent
+ * and both are precise enough. Smoothed a little so a speedometer doesn't flicker.
+ */
+function withMotion(f: NavFix, prev: NavFix | null): NavFix {
+  if (f.speed != null && f.course != null) return f;
+  if (!prev) return { ...f, speed: f.speed ?? null };
+  const dt = (f.t - prev.t) / 1000;
+  // Too soon after the previous one (browsers repeat a fix) or too imprecise to tell: keep the last speed / direction.
+  if (dt < 0.4) return { ...f, speed: f.speed ?? prev.speed ?? null, course: f.course ?? prev.course ?? null };
+  const good = dt <= 6 && (f.accuracy ?? 10) <= 50 && (prev.accuracy ?? 10) <= 50;
+  if (!good) return f;
+  const d = haversine(prev, f);
+  const raw = d / dt;
+  const speed = f.speed ?? (prev.speed != null ? prev.speed * 0.4 + raw * 0.6 : raw);
+  const course = f.course ?? (d > 3 && speed > 1 ? bearingOf(prev, f) : null);
+  return { ...f, speed, course };
+}
+
+/** km/h for the speedometer: GPS noise while standing still reads 0, like a car's dial. */
+function kmh(mps: number | null | undefined): number | null {
+  if (mps == null) return null;
+  const v = mps * 3.6;
+  return v < 3 ? 0 : Math.round(v);
 }

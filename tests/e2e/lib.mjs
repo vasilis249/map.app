@@ -121,6 +121,14 @@ export async function hold(page, ms, during, name = PTT) {
     if (n && b && Math.abs(n.y - b.y) < 1 && Math.abs(n.x - b.x) < 1) break;
     b = n;
   }
+  // …and make sure the button itself is what's under the finger there (on a slow page a sheet can still be sliding
+  // although two measurements 100 ms apart agreed).
+  for (let i = 0; i < 30; i++) {
+    b = await btn.boundingBox();
+    const hit = b && (await btn.evaluate((el, [x, y]) => el.contains(document.elementFromPoint(x, y)), [b.x + b.width / 2, b.y + b.height / 2]));
+    if (hit) break;
+    await page.waitForTimeout(200);
+  }
   await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
   await page.mouse.down();
   await page.waitForTimeout(ms);

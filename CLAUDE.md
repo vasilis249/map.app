@@ -148,6 +148,22 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   the style can't be fetched. While navigating you are a navigation arrow (blue chevron, white edge, lying on the
   tilted map, turned to your course) instead of your photo; the route is drawn above streets / bridges / buildings
   and under labels, only the part ahead of you; the guidance banner is dark glass (Apple style).
+- D21 (P4, owner request: "smooth like Google Maps, live speed, 3D people at a red light like a Tesla"):
+  - `src/lib/nav/motion.ts` (pure, unit-tested): one fix a second → 60 fps. The arrow glides along the route at your
+    speed (dead reckoning ≤ 1.5 s past the last fix, small backward GPS corrections ignored, jumps > 300 m snapped),
+    the camera looks 20–80 m ahead along the road so it turns early and gently, zoom follows speed (18 → 15.6 from 0
+    to 130 km/h, ≥ 17.6 before a turn), pitch 52°. Stopped (< 0.8 m/s for 2 s, or no fix for 2.5 s — an iPhone sends
+    none while you stand, LESSONS #12): close 3D view, zoom 19.3, pitch 66° (map maxPitch 70).
+  - LiveMap follow mode: one requestAnimationFrame loop does one `jumpTo` per frame (no overlapping easeTo), moves
+    the arrow, trims the route line behind it ~5×/s, and skips frames when nothing moved (idle map at a light).
+  - Speedometer (km/h bubble): device speed, else from consecutive fixes (browsers repeat a fix ~0.25 s later: keep
+    the last speed); 0 below 3 km/h and after 3 s without fixes.
+  - 3D people (`src/components/map/people-3d.ts`): a MapLibre custom layer drawing with three.js (0.186.1, loaded only
+    when navigation starts) on the map's WebGL context: low-poly car (rounded body, glass cabin, wheels) or
+    pedestrian, white-grey / friend green / talking coral, Lambert-lit, gliding 1.5 s to each new position and turning
+    smoothly; models 1.7× (cars) / 2.4× (pedestrians) life size to read on a phone. Their photo floats 42 px above.
+    Server: `user_locations.vehicle_at` (last time > 5 m/s) → `map_people.in_vehicle` (≤ 5 min ago); others never get
+    the speed itself. People refresh every 2 s while navigating (5 s otherwise).
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.
 - PENDING: app name + bundle id (placeholders: `MapApp`, `gr.innera.mapapp`, scheme `mapapp` in `src/lib/brand.ts`,
@@ -228,6 +244,12 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   the banner said "ΕΟ54" instead of "Βασιλίσσης Σοφίας" (turned-onto street, name before road number).
 - Owner request after the summary: navigation arrow + Apple Maps look (D20). Checked with light / dark screenshots
   (map, route choices, navigation); flows map 27, nearby 16, nav 34 (+ arrow on / photo back) PASS.
+- Owner request 2 (D21): motion engine (unit tests 6: no jumps > 0.9 m / turns > 4° per frame at 50 km/h with GPS
+  noise, tunnel gap, red light with and without fixes, zoom by speed, reroute slide), speedometer, 3D people. SQL
+  location 40 (+ vehicle flag, speed never exposed). Checked with `map.project()` that each 3D figure sits exactly under
+  its person (and found + fixed: the compact photo's CSS scale also scaled MapLibre's marker transform). Flow nav 38.
+  Harness: `hold()` checks the button is really under the finger (a sliding sheet on a slow page got pressed beside).
+  The container's software GL renders the tilted 3D city at ~2–3 fps: smoothness / fps can only be judged on a phone.
 - Not verified: Stadia Maps itself (no key yet: its Pelias autocomplete format is written from the docs, not recorded;
   the Valhalla part is the same engine as the recorded answers), real Greek voice on iOS (native plugin, silent switch,
   locked screen, background), guidance + walkie audio together on a device, background navigation, a real drive (speed /

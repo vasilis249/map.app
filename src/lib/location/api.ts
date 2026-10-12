@@ -30,6 +30,8 @@ export interface MapPerson {
   distance_m: number;
   is_friend: boolean;
   can_talk: boolean;
+  /** Moved at vehicle speed in the last 5 minutes (drawn as a car while you navigate). */
+  in_vehicle?: boolean;
 }
 
 export const locationKeys = {

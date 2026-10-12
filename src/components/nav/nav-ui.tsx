@@ -198,3 +198,19 @@ export function RoutePreview({ nav, texts }: { nav: NavState; texts: NavTexts })
     </div>
   );
 }
+
+/** Live speed, like Google Maps' bubble: big number, "km/h" under it; "–" until the phone knows. */
+export function SpeedBubble({ kmh }: { kmh: number | null }) {
+  return (
+    <div
+      className="pointer-events-none grid h-16 w-16 shrink-0 place-items-center rounded-full border border-border/60 bg-background/95 shadow-float"
+      data-testid="nav-speed"
+      aria-label={kmh == null ? undefined : `${kmh} km/h`}
+    >
+      <div className="text-center leading-none">
+        <span className="block text-[1.6rem] font-bold tabular-nums">{kmh == null ? "–" : kmh}</span>
+        <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">km/h</span>
+      </div>
+    </div>
+  );
+}

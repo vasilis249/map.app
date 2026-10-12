@@ -267,7 +267,7 @@ export type Database = {
       confirm_age: { Args: Record<PropertyKey, never>; Returns: undefined };
       follow_list: { Args: { p_user: string; p_which: string; p_limit?: number; p_offset?: number }; Returns: { id: string; username: string; full_name: string; avatar_path: string; i_follow: boolean; follows_me: boolean }[] };
       follow_user: { Args: { p_user: string }; Returns: undefined };
-      map_people: { Args: { p_radius_m?: number }; Returns: { user_id: string; username: string; full_name: string; avatar_path: string; lat: number; lng: number; accuracy_m: number; heading: number; updated_at: string; distance_m: number; is_friend: boolean; can_talk: boolean }[] };
+      map_people: { Args: { p_radius_m?: number }; Returns: { user_id: string; username: string; full_name: string; avatar_path: string; lat: number; lng: number; accuracy_m: number; heading: number; updated_at: string; distance_m: number; is_friend: boolean; can_talk: boolean; in_vehicle: boolean }[] };
       my_blocked: { Args: Record<PropertyKey, never>; Returns: { id: string; username: string; full_name: string; avatar_path: string }[] };
       my_location_sharing: { Args: Record<PropertyKey, never>; Returns: { mode: string; talk_from: string; has_position: boolean; position_at: string; lat: number; lng: number; accuracy_m: number }[] };
       nav_quota: { Args: { p_kind: string }; Returns: undefined };

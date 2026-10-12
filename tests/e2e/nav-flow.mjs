@@ -111,8 +111,13 @@ ok("arrival time and what's left at the bottom", await seen(me.getByTestId("nav-
 ok("people within 200 m still on the map (Giorgos)", await seen(me.getByRole("button", { name: "Γιώργος Κ." }), 12_000));
 await me.screenshot({ path: `${S}/nav-3-start.png` });
 
-// 4. Drive from Syntagma onto the route and along it past two turns (≈ 15 m every 250 ms)
-await driveAlong([[37.97535, 23.73425], ...along(MAIN, 0, 330)]);
+// 4. Drive from Syntagma onto the route and along it past two turns at city speed (14 m a second ≈ 50 km/h)
+await driveAlong([[37.97535, 23.73425], ...along(MAIN, 0, 330, 14)], 1000);
+const kmhMoving = Number(await me.getByTestId("nav-speed").innerText().then((t) => t.replace(/\D/g, "")));
+// (≈ 50 km/h in theory; the test browser's slow software rendering stretches the 1 s steps, so less is measured)
+ok(`live speed while driving (${kmhMoving} km/h)`, kmhMoving >= 20 && kmhMoving <= 70);
+const cam1 = await camera();
+ok(`heading-up, tilted camera (bearing ${cam1?.bearing}°, pitch ${cam1?.pitch}°)`, cam1?.pitch >= 45 && cam1.pitch <= 58 && cam1.bearing !== 0);
 await me.waitForTimeout(2000);
 const said = await spoken();
 ok("the turns are announced in order: Vas. Georgiou, then Syntagma square",
@@ -120,8 +125,6 @@ ok("the turns are announced in order: Vas. Georgiou, then Syntagma square",
   && said.indexOf("Στρίψτε αριστερά στη Πλατεία Συντάγματος, ΕΟ1.") > said.indexOf("Στρίψτε αριστερά στη Βασιλέως Γεωργίου Α', ΕΟ54."));
 ok("the banner moved on (next: Filellinon), with the distance to it", await seen(me.getByTestId("nav-instruction").filter({ hasText: "Φιλελλήνων" }), 5_000)
   && /^\d+ μ$/.test((await me.getByTestId("nav-distance").textContent()) ?? ""));
-const cam1 = await camera();
-ok(`heading-up, tilted camera (bearing ${cam1?.bearing}°, pitch ${cam1?.pitch}°)`, cam1?.pitch === 50 && cam1.bearing !== 0);
 ok("you are the navigation arrow (not your photo) while navigating", (await me.locator("[data-puck]").count()) === 1);
 await me.screenshot({ path: `${S}/nav-4-driving.png` });
 
@@ -131,7 +134,13 @@ const ahead = along(MAIN, 380, 400)[0];
 await gio.context().setGeolocation({ latitude: ahead[0], longitude: ahead[1], accuracy: 8 });
 ok("Giorgos moved a little ahead on my route (his position stored)", (await sqlUntil(
   `select (abs(lat - ${ahead[0]}) < 0.0001 and abs(lng - ${ahead[1]}) < 0.0001)::text from private.user_locations where user_id = '${GIO}'`, "true", 15_000)) === "true");
-await me.waitForTimeout(6000); // the map's 5 s refresh
+// He is in a car (moved at vehicle speed a moment ago).
+sql(`update private.user_locations set vehicle_at = now() where user_id = '${GIO}'`);
+await me.waitForTimeout(6000); // the map's refresh; and me standing still at the light all this time (no new fixes)
+const still = await me.evaluate(() => { const b = document.querySelector("[data-frames]")?.dataset ?? {}; return { zoom: +b.zoom, pitch: +b.pitch, figures: +b.figures }; });
+ok(`stopped at the light: close, tilted 3D view (zoom ${still.zoom}, pitch ${still.pitch})`, still.zoom >= 19 && still.pitch >= 63);
+ok("… the speedometer reads 0", (await me.getByTestId("nav-speed").innerText()).replace(/\s/g, "").startsWith("0"));
+ok(`… people around me in 3D (${still.figures} figure: Giorgos's car)`, still.figures === 1);
 await me.screenshot({ path: `${S}/nav-4a-gio.png` });
 await me.getByRole("button", { name: "Γιώργος Κ." }).click({ timeout: 10_000 });
 ok("his card opens during navigation, with the push-to-talk button", await seen(me.getByRole("button", { name: "Κράτα πατημένο και μίλα" })));
@@ -142,7 +151,7 @@ await hold(me, 300, async () => {
   heldFrom = Date.now();
   await me.screenshot({ path: `${S}/nav-4b-talking.png` });
   // Drive on while talking: the "In 400 m, turn left onto Filellinon" alert falls due now.
-  for (const p of along(MAIN, 330, 450)) { await goTo(p); await me.waitForTimeout(200); }
+  for (const p of along(MAIN, 330, 450, 14)) { await goTo(p); await me.waitForTimeout(1000); }
   await me.waitForTimeout(800);
 });
 releasedAt = Date.now();
