@@ -164,6 +164,8 @@ const el = {
   },
   nav: {
     whereTo: "Πού πας;",
+    limit: "Όριο ταχύτητας {{limit}} km/h",
+    sayLimit: "Όριο ταχύτητας {{limit}}.",
     searchPlaceholder: "Διεύθυνση ή μέρος",
     searchHint: "Γράψε τουλάχιστον 2 γράμματα.",
     noPlaces: "Δεν βρέθηκε κάτι με αυτό το όνομα.",

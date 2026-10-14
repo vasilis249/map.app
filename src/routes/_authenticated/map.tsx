@@ -14,6 +14,8 @@ import { spokenMetres } from "@/lib/nav/guidance";
 import { RoadAheadChip, RoadAskCard, RoadDetailSheet, roadLabel, RoadReportButton, RoadReportSheet } from "@/components/road/road-ui";
 import { createRoadReport, RoadApiError, reportRoadAbuse, voteRoadReport, withdrawRoadReport } from "@/lib/reports/api";
 import { createReportAlerts, relevant, type RoadKind, type RoadReport } from "@/lib/reports/road";
+import { limitAt } from "@/lib/nav/route";
+import { createSpeedWatch } from "@/lib/nav/speed-limit";
 import { useRoadReports } from "@/lib/reports/use-road";
 import { toast } from "sonner";
 import type { Place } from "@/lib/nav/route";
@@ -194,6 +196,20 @@ function MapPage() {
     announce(`road:${e.report.id}`, t("road.sayAhead", { kind, distance: spokenDistance(spokenMetres(e.distance), t, i18n.language) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressAlong, navActive]);
+  // Speed limit where the map knows it; over it: the speedometer turns red and the limit is said once.
+  const limit = navActive && nav.route && nav.progress ? limitAt(nav.route.route, nav.progress.along) : null;
+  const speedWatch = useRef(createSpeedWatch());
+  const [speeding, setSpeeding] = useState(false);
+  useEffect(() => {
+    if (!navActive) {
+      speedWatch.current = createSpeedWatch();
+      return setSpeeding(false);
+    }
+    const st = speedWatch.current.update(nav.speedKmh, limit, Date.now());
+    setSpeeding(st.over);
+    if (st.say != null) announce(`limit:${st.say}`, t("nav.sayLimit", { limit: st.say }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navActive, nav.speedKmh, limit]);
   const roadError = (e: unknown) =>
     toast(t(e instanceof RoadApiError && e.code !== "generic" ? `road.errors.${e.code}` : "errors.generic"));
   const refreshRoads = () => void qc.invalidateQueries({ queryKey: ["road"] });
@@ -345,7 +361,7 @@ function MapPage() {
         {/* ghost mode (one tap) · back to me */}
         <div className="pass-through flex items-end justify-between gap-3">
           <div className="flex items-end gap-2">
-            {navActive && <SpeedBubble kmh={nav.speedKmh} />}
+            {navActive && <SpeedBubble kmh={nav.speedKmh} limit={limit} over={speeding} />}
             {s ? <GhostButton sharing={s} /> : <span />}
           </div>
           <div className="flex items-end gap-2">

@@ -200,17 +200,37 @@ export function RoutePreview({ nav, texts }: { nav: NavState; texts: NavTexts })
 }
 
 /** Live speed, like Google Maps' bubble: big number, "km/h" under it; "–" until the phone knows. */
-export function SpeedBubble({ kmh }: { kmh: number | null }) {
+/**
+ * Your speed (km/h bubble) and, where the map knows it, the speed limit beside it (a European round sign). Over the
+ * limit the bubble turns red (Waze).
+ */
+export function SpeedBubble({ kmh, limit = null, over = false }: { kmh: number | null; limit?: number | null; over?: boolean }) {
+  const { t } = useTranslation();
   return (
-    <div
-      className="pointer-events-none grid h-16 w-16 shrink-0 place-items-center rounded-full border border-border/60 bg-background/95 shadow-float"
-      data-testid="nav-speed"
-      aria-label={kmh == null ? undefined : `${kmh} km/h`}
-    >
-      <div className="text-center leading-none">
-        <span className="block text-[1.6rem] font-bold tabular-nums">{kmh == null ? "–" : kmh}</span>
-        <span className="block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">km/h</span>
+    <div className="pointer-events-none flex items-end gap-1.5">
+      <div
+        className={cn(
+          "grid h-16 w-16 shrink-0 place-items-center rounded-full border shadow-float transition-colors",
+          over ? "border-transparent bg-[#ff3b30] text-white" : "glass border-border/60",
+        )}
+        data-testid="nav-speed"
+        data-over={over ? "1" : "0"}
+        aria-label={kmh == null ? undefined : `${kmh} km/h`}
+      >
+        <div className="text-center leading-none">
+          <span className="block text-[1.6rem] font-bold tabular-nums">{kmh == null ? "–" : kmh}</span>
+          <span className={cn("block text-[10px] font-semibold uppercase tracking-wide", over ? "text-white/85" : "text-muted-foreground")}>km/h</span>
+        </div>
       </div>
+      {limit != null && (
+        <div
+          data-testid="nav-limit"
+          aria-label={t("nav.limit", { limit })}
+          className="grid h-12 w-12 place-items-center rounded-full border-[5px] border-[#e5252a] bg-white text-[1.1rem] font-bold tabular-nums text-black shadow-float"
+        >
+          {limit}
+        </div>
+      )}
     </div>
   );
 }

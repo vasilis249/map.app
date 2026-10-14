@@ -1,7 +1,7 @@
 // Server-only: the routing / search provider. The ONE place that knows who the provider is (today Stadia Maps:
 // hosted Valhalla routing + Pelias autocomplete); swap it by rewriting these two functions — the app only sees
 // NavRoute / Place (src/lib/nav/route.ts). The key comes from the Worker's secrets and never leaves the server.
-import { parsePelias, parseValhalla, type NavRoute, type Place } from "./route";
+import { parseLimits, parsePelias, parseValhalla, type NavRoute, type Place } from "./route";
 import type { LatLng } from "./geo";
 
 export class ProviderError extends Error {
@@ -51,11 +51,35 @@ export async function providerRoute(from: LatLng & { heading?: number }, to: Lat
   // Valhalla answers 400 with error_code 442 / 171 … when there is no road between the two points.
   if (res.status === 400) throw new ProviderError("no_route");
   if (!res.ok) throw new ProviderError("provider");
+  let routes: NavRoute[];
   try {
-    return parseValhalla(await res.json());
+    routes = parseValhalla(await res.json());
   } catch {
     throw new ProviderError("provider");
   }
+  // Speed limits: a second, optional call per route (map matching over its own shape). A route without them still works.
+  const limits = await Promise.all(routes.map((r) => providerLimits(r, key, base).catch(() => [])));
+  return routes.map((r, i) => ({ ...r, limits: limits[i] }));
+}
+
+const LIMITS_TIMEOUT_MS = 4_000;
+
+/** Speed limits along a route: Valhalla trace_attributes over the route's own points (edge_walk follows them exactly). */
+async function providerLimits(route: NavRoute, key: string, base: string): Promise<[number, number, number][]> {
+  if (route.points.length < 2 || route.points.length > 20_000) return [];
+  const res = await fetch(`${base}/trace_attributes/v1?api_key=${encodeURIComponent(key)}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      shape: route.points.map(([lng, lat]) => ({ lat, lon: lng })),
+      shape_match: "edge_walk",
+      costing: "auto",
+      filters: { attributes: ["edge.speed_limit", "edge.length"], action: "include" },
+    }),
+    signal: AbortSignal.timeout(LIMITS_TIMEOUT_MS),
+  });
+  if (!res.ok) return [];
+  return parseLimits(await res.json());
 }
 
 /** Places matching what you typed, nearest to `near` first. */

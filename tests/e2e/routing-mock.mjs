@@ -6,7 +6,9 @@ import fs from "node:fs";
 
 export const ROUTING_KEY = "local-routing-key"; // a test value for the local stack, not a credential
 const fx = (n) => JSON.parse(fs.readFileSync(new URL(`../../src/lib/nav/fixtures/${n}.json`, import.meta.url)));
-const MAIN = fx("valhalla-athens"), REROUTE = fx("valhalla-athens-reroute");
+const MAIN = fx("valhalla-athens"), REROUTE = fx("valhalla-athens-reroute"), LIMITS = fx("valhalla-athens.limits");
+// The recorded trace_attributes answer is for the main trip's own shape (its points, in order).
+const LIMITS_POINTS = Math.max(...LIMITS.edges.map((e) => e.end_shape_index)) + 1;
 const PLACES = [
   ["Κουκάκι", "Αθήνα, Ελλάδα", 37.9715, 23.7267],
   ["Κουκάκι Πλατεία", "Αθήνα, Ελλάδα", 37.9668, 23.7266],
@@ -36,6 +38,9 @@ export function routing(req, res, url) {
       // ≈ 150 m around the recorded trip's start (Syntagma) → that trip; anywhere else → the recorded reroute.
       const nearStart = Math.abs(from.lat - 37.9755) < 0.0014 && Math.abs(from.lon - 23.7348) < 0.0018;
       return send(res, 200, nearStart ? MAIN : REROUTE);
+    }
+    if (path === "/trace_attributes/v1" && req.method === "POST") {
+      return send(res, 200, entry.body.shape?.length === LIMITS_POINTS ? LIMITS : { edges: [] });
     }
     if (path === "/geocoding/v1/autocomplete") {
       const q = fold(url.searchParams.get("text") || "");

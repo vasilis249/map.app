@@ -164,6 +164,8 @@ const en: Messages = {
   },
   nav: {
     whereTo: "Where to?",
+    limit: "Speed limit {{limit}} km/h",
+    sayLimit: "Speed limit {{limit}}.",
     searchPlaceholder: "Address or place",
     searchHint: "Type at least 2 letters.",
     noPlaces: "Nothing found by that name.",

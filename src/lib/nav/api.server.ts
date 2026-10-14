@@ -17,7 +17,7 @@ const MAX_BODY = 4_096;
 const MAX_TRIP_M = 1_500_000;
 const ROUTE_TTL_S = 300;
 /** Part of every cache key: bump it when the shape of NavRoute / Place (route.ts) changes. */
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const SEARCH_TTL_S = 86_400;
 
 function point(v: unknown): LatLng | null {

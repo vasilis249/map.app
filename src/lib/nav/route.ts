@@ -57,6 +57,11 @@ export interface NavRoute {
   ferry: boolean;
   /** The main road (the longest stretch) — tells alternatives apart ("via Syngrou"). */
   via: string | null;
+  /**
+   * Speed limits along the route where OpenStreetMap knows them: [from m, to m, km/h], in order, not overlapping.
+   * Absent / empty when unknown (the provider's map matching failed, or nothing is tagged there).
+   */
+  limits?: [number, number, number][];
 }
 
 export interface Place {
@@ -193,6 +198,39 @@ export function parsePelias(json: unknown): Place[] {
     out.push({ id: str(p.gid, 200) ?? `${lat},${lng}`, name, detail, lat: lat as number, lng: lng as number });
   }
   return out;
+}
+
+/**
+ * Speed limits from a Valhalla trace_attributes answer over the route's own shape (edge_walk): each edge's length (km)
+ * and speed_limit (km/h; missing = unknown). Consecutive edges with the same limit merge into one stretch.
+ */
+export function parseLimits(json: unknown): [number, number, number][] {
+  if (!isObj(json) || !Array.isArray(json.edges)) throw new Error("bad_limits");
+  const out: [number, number, number][] = [];
+  let at = 0;
+  for (const e of json.edges as unknown[]) {
+    if (!isObj(e)) continue;
+    const len = num(e.length);
+    if (len == null || len < 0 || len > 1_000) continue;
+    const from = at;
+    at += len * 1_000;
+    const kmh = num(e.speed_limit);
+    // (Valhalla says 255 / 0 for "no limit" / unknown on some data; only real road limits count)
+    if (kmh == null || kmh < 5 || kmh > 150) continue;
+    const last = out.at(-1);
+    if (last && last[2] === kmh && Math.abs(last[1] - from) < 1) last[1] = Math.round(at);
+    else out.push([Math.round(from), Math.round(at), kmh]);
+  }
+  return out;
+}
+
+/** The speed limit at `along` metres on the route, or null where it isn't known. */
+export function limitAt(route: NavRoute, along: number): number | null {
+  for (const [from, to, kmh] of route.limits ?? []) {
+    if (along < from) return null;
+    if (along < to) return kmh;
+  }
+  return null;
 }
 
 // --- On the client ---------------------------------------------------------------------------------------------------

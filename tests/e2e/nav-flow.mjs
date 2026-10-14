@@ -79,7 +79,20 @@ ok("people within 200 m still on the map (Giorgos)", await seen(me.getByRole("bu
 await me.screenshot({ path: `${S}/nav-3-start.png` });
 
 // 4. Drive from Syntagma onto the route and along it past two turns at city speed (14 m a second ≈ 50 km/h)
-await driveAlong([[37.97535, 23.73425], ...along(MAIN, 0, 330, 14)], 1000);
+// (speed limits from the provider's map matching: 30 km/h on Amalias / Vas. Georgiou in the recorded answer)
+const limitsSeen = new Set(), overSeen = [];
+for (const p of [[37.97535, 23.73425], ...along(MAIN, 0, 330, 14)]) {
+  await goTo(p);
+  await me.waitForTimeout(1000);
+  const l = await me.getByTestId("nav-limit").textContent({ timeout: 150 }).catch(() => null);
+  if (l) limitsSeen.add(l.trim());
+  overSeen.push(await me.getByTestId("nav-speed").getAttribute("data-over", { timeout: 150 }).catch(() => null));
+}
+ok(`speed limit sign where the map knows it (${[...limitsSeen].join(",")})`, limitsSeen.has("30"));
+ok("over it (≈ 50 in a 30): the speedometer turns red", overSeen.includes("1"));
+const limitSaid = (await spoken()).filter((x) => x.startsWith("Όριο ταχύτητας"));
+ok(`… and the limit is said once (${limitSaid.join(" | ")})`, limitSaid.length === 1 && limitSaid[0] === "Όριο ταχύτητας 30.");
+await me.screenshot({ path: `${S}/nav-4b-limit.png` });
 const kmhMoving = Number(await me.getByTestId("nav-speed").innerText().then((t) => t.replace(/\D/g, "")));
 // (≈ 50 km/h in theory; the test browser's slow software rendering stretches the 1 s steps, so less is measured)
 ok(`live speed while driving (${kmhMoving} km/h)`, kmhMoving >= 20 && kmhMoving <= 70);
