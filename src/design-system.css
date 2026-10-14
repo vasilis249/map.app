@@ -133,9 +133,15 @@
   --wave: #cdcdd3;
   --nav: rgb(255 255 255 / 0.88);
   --nav-active: rgb(11 11 12 / 0.06);
-  --glass: rgb(255 255 255 / 0.88);
+  /* Liquid Glass (iOS 26, the App Store app): translucent, blurred, with a bright rim and a soft sheen. */
+  --glass: rgb(255 255 255 / 0.56);
+  --glass-strong: rgb(250 250 252 / 0.8);
   --glass-tile: rgb(120 120 128 / 0.1);
-  --glass-edge: rgb(255 255 255 / 0.7);
+  --glass-edge: rgb(255 255 255 / 0.9);
+  --glass-rim: rgb(0 0 0 / 0.07);
+  --glass-shine: rgb(255 255 255 / 0.32);
+  --glass-pill: rgb(255 255 255 / 0.7);
+  --glass-shadow: 0 10px 30px rgb(0 0 0 / 0.1), 0 1px 3px rgb(0 0 0 / 0.06);
   --float-shadow: 0 10px 30px rgb(0 0 0 / 0.1);
 }
 
@@ -172,9 +178,14 @@
     --wave: #3a3a41;
     --nav: rgb(10 10 11 / 0.86);
     --nav-active: rgb(255 255 255 / 0.08);
-    --glass: rgb(10 10 11 / 0.84);
+    --glass: rgb(36 36 42 / 0.52);
+    --glass-strong: rgb(28 28 32 / 0.8);
     --glass-tile: rgb(120 120 128 / 0.2);
-    --glass-edge: rgb(255 255 255 / 0.12);
+    --glass-edge: rgb(255 255 255 / 0.2);
+    --glass-rim: rgb(255 255 255 / 0.08);
+    --glass-shine: rgb(255 255 255 / 0.08);
+    --glass-pill: rgb(255 255 255 / 0.14);
+    --glass-shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 1px 3px rgb(0 0 0 / 0.3);
     --float-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
   }
 }
@@ -246,11 +257,32 @@
   }
 }
 
-/* Frosted glass for things floating over content (nav, header, mini player, map controls). */
+/*
+ * Liquid Glass for everything floating over content (tab bar, header, map controls, cards on the map): see-through,
+ * the content behind blurred and more saturated, a bright upper rim, a faint sheen from the top-left, a soft shadow.
+ * Carries its own hairline border and shadow (don't add border / shadow classes next to it).
+ */
 @utility glass {
   background-color: var(--glass);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+  background-image: linear-gradient(155deg, var(--glass-shine) 0%, transparent 45%, transparent 75%, color-mix(in oklab, var(--glass-shine) 40%, transparent) 100%);
+  -webkit-backdrop-filter: blur(22px) saturate(190%);
+  backdrop-filter: blur(22px) saturate(190%);
+  border: 0.5px solid var(--glass-rim);
+  box-shadow: inset 0 1px 0.5px var(--glass-edge), inset 0 -0.5px 0.5px color-mix(in oklab, var(--glass-edge) 30%, transparent), var(--glass-shadow);
+}
+/* The same, denser: bottom sheets and dialogs that hold text. */
+@utility glass-sheet {
+  background-color: var(--glass-strong);
+  background-image: linear-gradient(170deg, var(--glass-shine) 0%, transparent 30%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  backdrop-filter: blur(32px) saturate(190%);
+  border: 0.5px solid var(--glass-rim);
+  box-shadow: inset 0 1px 0.5px var(--glass-edge), var(--glass-shadow);
+}
+/* The selected "droplet" inside glass (the active tab, the chosen segment). */
+@utility glass-pill {
+  background-color: var(--glass-pill);
+  box-shadow: inset 0 1px 0.5px var(--glass-edge), 0 1px 4px rgb(0 0 0 / 0.08);
 }
 
 /* A tappable tile on glass (sheets, cards): a translucent fill with a light top edge. */

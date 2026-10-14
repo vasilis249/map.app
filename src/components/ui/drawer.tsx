@@ -10,7 +10,7 @@ function Drawer({ shouldScaleBackground = false, ...props }: React.ComponentProp
 const DrawerPortal = DrawerPrimitive.Portal;
 
 function DrawerOverlay({ className, ...props }: React.ComponentProps<typeof DrawerPrimitive.Overlay>) {
-  return <DrawerPrimitive.Overlay className={cn("fixed inset-0 z-50 bg-black/40", className)} {...props} />;
+  return <DrawerPrimitive.Overlay className={cn("fixed inset-0 z-50 bg-black/25", className)} {...props} />;
 }
 
 function DrawerContent({ className, children, ...props }: React.ComponentProps<typeof DrawerPrimitive.Content>) {
@@ -19,12 +19,13 @@ function DrawerContent({ className, children, ...props }: React.ComponentProps<t
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          "fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-3xl border-t border-border bg-sheet pb-[env(safe-area-inset-bottom)]",
+          // iOS 26: a floating Liquid Glass sheet, inset from the screen's edges, large corners
+          "glass-sheet fixed inset-x-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-50 mt-24 flex h-auto flex-col rounded-[2.25rem]",
           className,
         )}
         {...props}
       >
-        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-border" />
+        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-foreground/20" />
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>

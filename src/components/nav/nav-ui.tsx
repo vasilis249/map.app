@@ -116,7 +116,7 @@ export function NavFooter({ nav, delay_s = 0 }: { nav: NavState; delay_s?: numbe
   const eta = (nav.progress?.eta_s ?? r.route.time_s) + delay_s;
   const left = nav.progress?.remaining ?? r.total;
   return (
-    <div className="flex items-center gap-3 rounded-3xl glass border border-border/60 p-3 shadow-float">
+    <div className="flex items-center gap-3 rounded-3xl glass p-3">
       <div className="min-w-0 flex-1 pl-1">
         <p className="text-tagline font-bold tabular-nums" data-testid="nav-eta">
           {t("nav.arrival", { time: arrivalTime(eta, i18n.language) })}
@@ -135,7 +135,7 @@ export function NavFooter({ nav, delay_s = 0 }: { nav: NavState; delay_s?: numbe
         onClick={() => setMuted(!nav.muted)}
         aria-label={nav.muted ? t("nav.unmute") : t("nav.mute")}
         aria-pressed={nav.muted}
-        className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-secondary"
+        className="glass-tile grid h-12 w-12 shrink-0 place-items-center rounded-full"
       >
         {nav.muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
       </button>
@@ -157,7 +157,7 @@ export function RoutePreview({ nav, texts, onReplan }: { nav: NavState; texts: N
     onReplan();
   };
   return (
-    <div className="rounded-3xl glass border border-border/60 p-4 shadow-float" data-testid="route-preview">
+    <div className="rounded-3xl glass p-4" data-testid="route-preview">
       <p className="truncate text-callout font-semibold">{t("nav.routes", { place: nav.dest?.name ?? "" })}</p>
       <div className="mt-2 flex gap-2">
         {(["avoidTolls", "avoidHighways"] as const).map((k) => (
@@ -191,7 +191,7 @@ export function RoutePreview({ nav, texts, onReplan }: { nav: NavState; texts: N
                   onClick={() => chooseRoute(i)}
                   className={cn(
                     "flex w-full items-center gap-3 rounded-2xl border-2 px-3 py-2 text-left",
-                    nav.chosen === i ? "border-primary bg-primary/10" : "border-transparent bg-secondary",
+                    nav.chosen === i ? "border-link bg-link/10" : "glass-tile border-transparent",
                   )}
                 >
                   <span className="min-w-0 flex-1">
@@ -210,7 +210,7 @@ export function RoutePreview({ nav, texts, onReplan }: { nav: NavState; texts: N
         </ul>
       )}
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={stopNav} className="h-12 rounded-full bg-secondary font-semibold">
+        <button type="button" onClick={stopNav} className="glass-tile h-12 rounded-full font-semibold">
           {t("nav.cancel")}
         </button>
         <button
@@ -237,8 +237,8 @@ export function SpeedBubble({ kmh, limit = null, over = false }: { kmh: number |
     <div className="pointer-events-none flex items-end gap-1.5">
       <div
         className={cn(
-          "grid h-16 w-16 shrink-0 place-items-center rounded-full border shadow-float transition-colors",
-          over ? "border-transparent bg-[#ff3b30] text-white" : "glass border-border/60",
+          "grid h-16 w-16 shrink-0 place-items-center rounded-full transition-colors",
+          over ? "bg-[#ff3b30] text-white shadow-float" : "glass",
         )}
         data-testid="nav-speed"
         data-over={over ? "1" : "0"}

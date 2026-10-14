@@ -229,7 +229,7 @@ function personElement(p: MapPerson, talking: boolean, age: string | null, onSel
   });
   const label = document.createElement("span");
   label.className =
-    "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap glass rounded-full border border-border/60 px-2 py-0.5 text-[11px] font-semibold text-foreground";
+    "pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap glass rounded-full px-2 py-0.5 text-[11px] font-semibold text-foreground";
   label.textContent = age ? `${name.split(" ")[0]} · ${age}` : name.split(" ")[0];
   inner.append(btn);
   if (!compact) inner.append(label);

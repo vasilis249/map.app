@@ -134,7 +134,7 @@ export function ParkingAskCard({
     return () => clearTimeout(id);
   }, [onNo]);
   return (
-    <div data-testid={testId} className="rounded-3xl glass border border-border/60 p-4 shadow-float">
+    <div data-testid={testId} className="rounded-3xl glass p-4">
       <div className="flex items-center gap-3">
         <ParkingBadge state={state} size={40} />
         <p className="text-body font-semibold">{question}</p>

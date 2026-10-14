@@ -8,7 +8,7 @@ Tracking: **No** (no ads, no analytics SDK, no data broker, no tracking domains)
 
 | Data type (Apple's name) | Collected | Linked to the user | Used for tracking | Purpose | Why / retention |
 |---|---|---|---|---|---|
-| Precise Location | Yes | Yes | No | App Functionality | Only when sharing is on; latest position only, deleted when sharing stops or after 1 h; road reports (deleted 1 day after expiry) |
+| Precise Location | Yes | Yes | No | App Functionality | Only when sharing is on; latest position only, deleted when sharing stops or after 1 h; road reports (deleted 1 day after expiry; cameras live 30 days); parking spots you mark (deleted 1 h after expiry); route start / destination → routing provider |
 | Audio Data | Yes | Yes | No | App Functionality | Push-to-talk voices, kept 24 h |
 | Email Address | Yes | Yes | No | App Functionality | Sign-in |
 | Name | Yes | Yes | No | App Functionality | Profile name, username |

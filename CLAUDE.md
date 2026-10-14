@@ -61,7 +61,8 @@ notifications (follow | nearby | walkie; one row per actor+kind, moved to top) �
 location_sharing (off | friends | everyone; talk_from everyone | following | nobody) · private.user_locations (latest
 only) · private.nearby_knocks / nearby_messages (+ private.nearby_audio, 24 h) · walkie_messages (+ private.walkie_audio,
 24 h) · walkie_contacts (channel on ≤ 10, seen_at) · private.walkie_diag · private.rate_events · storage bucket `avatars` ·
-private.road_reports / road_votes / road_strikes (P5) · user_locations.vehicle_at (P4: 3D cars).
+private.road_reports (+ sub, P7) / road_votes / road_strikes (P5) · private.parking_spots (P7) · user_locations.vehicle_at
+(P4: 3D cars).
 Realtime: private channels `walkie:<a>:<b>`, `nearby:<a>:<b>` (a < b) and inbox `nearby-in:<uid>` (read-only,
 written by `realtime.send` from `nearby_knock`), authorized by policies on `realtime.messages`.
 
@@ -195,6 +196,35 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   callable, or a direct INSERT / DELETE / UPDATE (beyond the profile's editable columns and notifications.read_at)
   appears. Performance: the deploy guard keeps first-load JS ≤ 300 KB gzipped and MapLibre / three.js lazy; polling
   stops in the background (TanStack Query's default, checked by the `release` flow).
+- D26 (P7) Waze report catalog: details per kind (`road_reports.sub`, server-checked list = client `ROAD_SUBS`): traffic
+  moderate / heavy / standstill, police visible / hidden / other side, accident minor / major / other side, hazard on the
+  road (object, pothole, road works, broken light, stopped vehicle, animal, shoulder) or weather (fog, flood, ice, hail),
+  closed (no details), camera speed / red light, help tyre / battery / fuel / other. Two taps (kind → detail, or
+  "Αναφορά: X"). Lifetimes by detail: camera 30 d, road works 1 d, weather 3 h, major accident 2 h. "Other side" applies
+  to the opposite direction and is never merged with this side; cameras merge within 40 m. `road_withdraw` takes your own
+  back without a strike. Labels / voice use the detail's name.
+- D27 (P7) Speed limits: the provider's map matching (Valhalla trace_attributes, edge_walk over the route's own shape)
+  after each route, optional; `NavRoute.limits` [from m, to m, km/h]. Round sign beside the speedometer where OSM knows
+  the limit; speedometer red above limit + max(5, 5 %); the limit said once per time you go over (guidance queue).
+- D28 (P7) Traffic on the route: traffic reports on the route ahead colour it (250 m before → 50 m after; orange /
+  red / dark red) and add 1 / 3 / 5 min to the arrival. Closed roads go to the provider as `exclude_locations` (≤ 10);
+  one reported on the route ahead while navigating → "Κλειστός δρόμος στη διαδρομή. Βρίσκω άλλη." + an immediate reroute
+  (`navigator.requestReroute`); if avoiding it leaves no route, the route through it is used.
+- D29 (P7) Route options + shortcuts: avoid tolls / motorways (chips in the route choices, remembered on the device,
+  Valhalla use_tolls / use_highways 0). Home / Work / 8 recent destinations in the search, device-only; one tap, also
+  while driving (no typing).
+- D30 (P7, owner idea) Parking: "Φεύγω — ελευθερώνω θέση" = green spot 15 min, "Πάρκαρα εδώ" = red 10 min (parking on a
+  green spot within 15 m turns it red for everyone), "Πιάστηκε" on a green one; anonymous, blocks / disabled hidden,
+  rows deleted 1 h after expiry (cron expire-parking), 20 marks / 10 min + 60 / day. Your car's place is device-only:
+  driving off from it (40–400 m, > 15 km/h, same day) asks "Ελευθέρωσες τη θέση σου;" (green where the car was);
+  arrival asks "Πάρκαρες;"; near the destination (< 1.5 km left) the nearest free spot ≤ 300 m from it is offered as a
+  route. No abuse report for spots (no content; short life + limits).
+- D31 (P7, owner request) Liquid Glass (iOS 26 / App Store look): `glass` (translucent, blur 22 px + saturate, bright
+  top rim, sheen, own hairline + shadow — no border / shadow classes beside it), `glass-sheet` (denser, for bottom
+  sheets: floating, inset 8 px, 36 px corners), `glass-pill` (the selected tab / segment), `glass-tile` (buttons on
+  glass). Floating tab bar with icon + label, the current tab in a tinted droplet.
+- Routing for now: still Stadia only (owner chose the free Stadia key over the public FOSSGIS / Photon services, which
+  would be new processors of trip data); until the key is set the Worker answers "unavailable".
 - Icon (P6): `design/icon.svg` (navigation arrow + voice waves, no name), rendered by `scripts/make-icons.mjs`.
 - PROPOSAL (needs owner OK, tracker.ts): when a fix is skipped only because of the 3 s gate, send it when the gate
   opens (trailing send). Today a fix skipped right before you stop waits for the 60 s heartbeat.

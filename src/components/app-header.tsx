@@ -30,7 +30,7 @@ export function AppHeader({
   const { t } = useTranslation();
   if (large)
     return (
-      <header className="safe-top sticky top-0 z-30 bg-background/90 backdrop-blur-xl">
+      <header className="safe-top sticky top-0 z-30 bg-background/70 backdrop-blur-2xl backdrop-saturate-200">
         <div className="flex items-end justify-between gap-3 px-4 pb-1 pt-3">
           <div className="min-w-0">
             {kicker && <div className="truncate text-caption font-medium text-muted-foreground">{kicker}</div>}
@@ -41,7 +41,7 @@ export function AppHeader({
       </header>
     );
   return (
-    <header className="safe-top sticky top-0 z-30 bg-background/90 backdrop-blur-xl">
+    <header className="safe-top sticky top-0 z-30 bg-background/70 backdrop-blur-2xl backdrop-saturate-200">
       <div className="relative flex h-14 items-center justify-center px-4">
         <div className="absolute left-2 flex items-center">
           {back ? (

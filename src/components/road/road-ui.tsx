@@ -219,7 +219,7 @@ export function RoadDetailSheet({
                     type="button"
                     aria-pressed={report.voted === -1}
                     onClick={() => onVote(report, -1)}
-                    className="flex h-14 items-center justify-center gap-2 rounded-full bg-secondary font-semibold"
+                    className="flex h-14 items-center justify-center gap-2 rounded-full glass-tile font-semibold"
                   >
                     <ThumbsDown className="h-5 w-5" /> {t("road.no")}
                   </button>
@@ -255,7 +255,7 @@ export function RoadAskCard({ report, onVote, onDismiss }: { report: RoadReport;
     return () => clearTimeout(id);
   }, [report.id, onDismiss]);
   return (
-    <div data-testid="road-ask" className="rounded-3xl glass border border-border/60 p-4 shadow-float">
+    <div data-testid="road-ask" className="rounded-3xl glass p-4">
       <div className="flex items-center gap-3">
         <KindBadge kind={report.kind} size={40} />
         <p className="text-body font-semibold">
@@ -266,7 +266,7 @@ export function RoadAskCard({ report, onVote, onDismiss }: { report: RoadReport;
         <button type="button" onClick={() => onVote(1)} className="flex h-16 items-center justify-center gap-2 rounded-2xl bg-success text-body font-semibold text-white">
           <ThumbsUp className="h-6 w-6" /> {t("road.yes")}
         </button>
-        <button type="button" onClick={() => onVote(-1)} className="flex h-16 items-center justify-center gap-2 rounded-2xl bg-secondary text-body font-semibold">
+        <button type="button" onClick={() => onVote(-1)} className="flex h-16 items-center justify-center gap-2 rounded-2xl glass-tile text-body font-semibold">
           <ThumbsDown className="h-6 w-6" /> {t("road.no")}
         </button>
       </div>
