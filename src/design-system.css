@@ -134,6 +134,8 @@
   --nav: rgb(255 255 255 / 0.88);
   --nav-active: rgb(11 11 12 / 0.06);
   --glass: rgb(255 255 255 / 0.88);
+  --glass-tile: rgb(120 120 128 / 0.1);
+  --glass-edge: rgb(255 255 255 / 0.7);
   --float-shadow: 0 10px 30px rgb(0 0 0 / 0.1);
 }
 
@@ -171,6 +173,8 @@
     --nav: rgb(10 10 11 / 0.86);
     --nav-active: rgb(255 255 255 / 0.08);
     --glass: rgb(10 10 11 / 0.84);
+    --glass-tile: rgb(120 120 128 / 0.2);
+    --glass-edge: rgb(255 255 255 / 0.12);
     --float-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
   }
 }
@@ -247,6 +251,12 @@
   background-color: var(--glass);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
   backdrop-filter: saturate(180%) blur(20px);
+}
+
+/* A tappable tile on glass (sheets, cards): a translucent fill with a light top edge. */
+@utility glass-tile {
+  background-color: var(--glass-tile);
+  box-shadow: inset 0 1px 0 var(--glass-edge), inset 0 0 0 0.5px rgb(127 127 127 / 0.18);
 }
 
 /* iOS app (Capacitor): safe areas for notch / home indicator (viewport-fit=cover). */

@@ -5,7 +5,7 @@ import { routePoint } from "@/lib/nav/motion";
 import { createProgress } from "@/lib/nav/progress";
 import { parseValhalla, prepareRoute } from "@/lib/nav/route";
 import { drive } from "@/lib/nav/testing/sim";
-import { alertDistance, alongRoute, createReportAlerts, relevant, type RoadReport } from "./road";
+import { alertDistance, alongRoute, createReportAlerts, relevant, ROAD_KINDS, ROAD_SUBS, type RoadReport } from "./road";
 
 const r = prepareRoute(parseValhalla(athens)[0]);
 /** A report `side` metres beside the route at `at` metres along it, reported by someone going `dir` (+1 our way). */
@@ -14,7 +14,7 @@ function rep(id: string, at: number, side = 8, dir: 1 | -1 | 0 = 1, extra: Parti
   const ahead = routePoint(r, at + 5);
   const brg = bearing(p, ahead);
   const q = offset(p, side, brg + 90);
-  return { id, kind: "police", ...q, heading: dir === 0 ? null : dir === 1 ? brg : (brg + 180) % 360, created_at: "", expires_at: "", up: 0, down: 0, mine: false, voted: 0, ...extra };
+  return { id, kind: "police", sub: null, ...q, heading: dir === 0 ? null : dir === 1 ? brg : (brg + 180) % 360, created_at: "", expires_at: "", up: 0, down: 0, mine: false, voted: 0, ...extra };
 }
 
 describe("which road reports matter", () => {
@@ -27,6 +27,19 @@ describe("which road reports matter", () => {
     expect(alongRoute(r, 0, rep("far", 1300, 120))).toBeNull();
     expect(alongRoute(r, 1500, rep("behind", 1300))).toBeNull();
     expect(alongRoute(r, 0, rep("opposite", 1300, 8, -1))).toBeNull();
+  });
+  it("'other side' reports count for those driving opposite to the reporter (Waze's opposite carriageway)", () => {
+    // reported by someone driving the other way, about our side: counts for us
+    expect(alongRoute(r, 0, rep("os", 1300, 8, -1, { sub: "other_side" }))).not.toBeNull();
+    // reported by someone driving our way, about the other side: not for us
+    expect(alongRoute(r, 0, rep("os2", 1300, 8, 1, { sub: "other_side" }))).toBeNull();
+  });
+  it("the catalog: every kind but 'closed' has details, none repeats within a kind", () => {
+    for (const k of ROAD_KINDS) {
+      const all = ROAD_SUBS[k].flat();
+      expect(new Set(all).size).toBe(all.length);
+      expect(all.length > 0).toBe(k !== "closed");
+    }
   });
   it("navigating: only those on the route, nearest first; not navigating: those within 2 km of you", () => {
     const list = [rep("x", 2000), rep("y", 900), rep("off", 1300, 300)];

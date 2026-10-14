@@ -103,6 +103,8 @@ const ROAD_COLORS: Record<MapRoad["kind"], string> = {
   hazard: "#ff9f0a",
   traffic: "#ff6a00",
   closed: "#c4001a",
+  camera: "#5e5ce6",
+  help: "#30b0c7",
 };
 
 function roadElement(r: MapRoad, label: string, onSelect: (id: string) => void): HTMLElement {

@@ -11,8 +11,8 @@ import { NavBanner, NavFooter, RoutePreview, SpeedBubble } from "@/components/na
 import { NavSearch } from "@/components/nav/nav-search";
 import { spokenDistance } from "@/lib/nav/format";
 import { spokenMetres } from "@/lib/nav/guidance";
-import { RoadAheadChip, RoadAskCard, RoadDetailSheet, RoadReportButton, RoadReportSheet } from "@/components/road/road-ui";
-import { createRoadReport, RoadApiError, reportRoadAbuse, voteRoadReport } from "@/lib/reports/api";
+import { RoadAheadChip, RoadAskCard, RoadDetailSheet, roadLabel, RoadReportButton, RoadReportSheet } from "@/components/road/road-ui";
+import { createRoadReport, RoadApiError, reportRoadAbuse, voteRoadReport, withdrawRoadReport } from "@/lib/reports/api";
 import { createReportAlerts, relevant, type RoadKind, type RoadReport } from "@/lib/reports/road";
 import { useRoadReports } from "@/lib/reports/use-road";
 import { toast } from "sonner";
@@ -190,17 +190,17 @@ function MapPage() {
     if (!e) return;
     if (e.type === "ask") return setRoadAsk(e.report);
     setRoadWarn(e.report.id);
-    const kind = t(`road.kinds.${e.report.kind}`);
+    const kind = roadLabel(t, e.report.kind, e.report.sub);
     announce(`road:${e.report.id}`, t("road.sayAhead", { kind, distance: spokenDistance(spokenMetres(e.distance), t, i18n.language) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressAlong, navActive]);
   const roadError = (e: unknown) =>
     toast(t(e instanceof RoadApiError && e.code !== "generic" ? `road.errors.${e.code}` : "errors.generic"));
   const refreshRoads = () => void qc.invalidateQueries({ queryKey: ["road"] });
-  const reportRoad = (kind: RoadKind) => {
+  const reportRoad = (kind: RoadKind, sub: string | null) => {
     setReporting(false);
     if (!me) return void toast(t("road.errors.no_position"));
-    createRoadReport(kind, me, nav.fix?.course ?? local.fix?.course ?? null)
+    createRoadReport(kind, sub, me, nav.fix?.course ?? local.fix?.course ?? null)
       .then(() => {
         toast(t("road.thanks"));
         refreshRoads();
@@ -589,6 +589,15 @@ function MapPage() {
         report={roadList.find((r) => r.id === roadOpen) ?? null}
         onClose={() => setRoadOpen(null)}
         onVote={voteRoad}
+        onWithdraw={(r) => {
+          setRoadOpen(null);
+          withdrawRoadReport(r.id)
+            .then(() => {
+              toast(t("road.withdrawn"));
+              refreshRoads();
+            })
+            .catch(roadError);
+        }}
         onAbuse={(r) => {
           setRoadOpen(null);
           reportRoadAbuse(r.id)

@@ -48,14 +48,25 @@ export async function roadReportsIn(b: Box): Promise<RoadReport[]> {
   return (data ?? []) as RoadReport[];
 }
 
-export async function createRoadReport(kind: RoadKind, at: LatLng, heading: number | null): Promise<string> {
-  const { data, error } = await supabase.rpc("road_report", { p_kind: kind, p_lat: at.lat, p_lng: at.lng, p_heading: heading ?? undefined });
+export async function createRoadReport(kind: RoadKind, sub: string | null, at: LatLng, heading: number | null): Promise<string> {
+  const { data, error } = await supabase.rpc("road_report", {
+    p_kind: kind,
+    p_lat: at.lat,
+    p_lng: at.lng,
+    p_heading: heading ?? undefined,
+    p_sub: sub ?? undefined,
+  });
   fail(error);
   return data as string;
 }
 
 export async function voteRoadReport(id: string, vote: 1 | -1) {
   fail((await supabase.rpc("road_vote", { p_id: id, p_vote: vote })).error);
+}
+
+/** Take your own report back (no strike). */
+export async function withdrawRoadReport(id: string) {
+  fail((await supabase.rpc("road_withdraw", { p_id: id })).error);
 }
 
 export async function reportRoadAbuse(id: string) {

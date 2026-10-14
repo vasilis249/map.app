@@ -1,9 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CarFront, Construction, Flag, Gauge, Siren, ThumbsDown, ThumbsUp, TriangleAlert, type LucideIcon } from "lucide-react";
+import type { TFunction } from "i18next";
+import { Camera, CarFront, ChevronLeft, Construction, Flag, Gauge, LifeBuoy, Siren, ThumbsDown, ThumbsUp, Trash2, TriangleAlert, type LucideIcon } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { formatDistance } from "@/lib/location/format";
-import { ROAD_KINDS, type RoadKind, type RoadReport } from "@/lib/reports/road";
+import { ROAD_KINDS, ROAD_SUBS, type RoadKind, type RoadReport } from "@/lib/reports/road";
 import { timeAgoShort } from "@/lib/time-ago";
 
 export const ROAD_ICON: Record<RoadKind, LucideIcon> = {
@@ -12,6 +13,8 @@ export const ROAD_ICON: Record<RoadKind, LucideIcon> = {
   hazard: TriangleAlert,
   traffic: Gauge,
   closed: Construction,
+  camera: Camera,
+  help: LifeBuoy,
 };
 export const ROAD_COLOR: Record<RoadKind, string> = {
   accident: "#ff3b30",
@@ -19,7 +22,14 @@ export const ROAD_COLOR: Record<RoadKind, string> = {
   hazard: "#ff9f0a",
   traffic: "#ff6a00",
   closed: "#c4001a",
+  camera: "#5e5ce6",
+  help: "#30b0c7",
 };
+
+/** What to call a report: its detail's full name ("Κρυμμένη αστυνομία"), else its kind ("Αστυνομία"). */
+export function roadLabel(t: TFunction, kind: RoadKind, sub: string | null | undefined) {
+  return sub ? t(`road.subs.${kind}.${sub}`) : t(`road.kinds.${kind}`);
+}
 
 function KindBadge({ kind, size = 44 }: { kind: RoadKind; size?: number }) {
   const Icon = ROAD_ICON[kind];
@@ -46,28 +56,95 @@ export function RoadReportButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-/** Five big tiles: one tap reports it where you are (no typing — safe enough to do at a red light). */
-export function RoadReportSheet({ open, onOpenChange, onPick }: { open: boolean; onOpenChange: (o: boolean) => void; onPick: (k: RoadKind) => void }) {
+/**
+ * Waze's report sheet: big kind tiles, then (one more tap) the detail — or "Report: Police" without one. "Closed road"
+ * has no details: one tap. No typing anywhere: safe enough at a red light.
+ */
+export function RoadReportSheet({
+  open,
+  onOpenChange,
+  onPick,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  onPick: (k: RoadKind, sub: string | null) => void;
+}) {
   const { t } = useTranslation();
+  const [kind, setKind] = useState<RoadKind | null>(null);
+  useEffect(() => {
+    if (!open) setKind(null);
+  }, [open]);
+  const choose = (k: RoadKind) => (ROAD_SUBS[k].length ? setKind(k) : onPick(k, null));
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="max-h-[92dvh]">
         <div className="overflow-y-auto px-5 pb-8 pt-3">
-          <DrawerTitle className="text-tagline font-semibold">{t("road.title")}</DrawerTitle>
-          <DrawerDescription className="text-caption text-muted-foreground">{t("road.hint")}</DrawerDescription>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {ROAD_KINDS.map((k) => (
+          {!kind ? (
+            <>
+              <DrawerTitle className="text-tagline font-semibold">{t("road.title")}</DrawerTitle>
+              <DrawerDescription className="text-caption text-muted-foreground">{t("road.hint")}</DrawerDescription>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                {ROAD_KINDS.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => choose(k)}
+                    className="glass-tile flex h-28 flex-col items-center justify-center gap-2 rounded-3xl text-body font-semibold active:scale-[0.98]"
+                  >
+                    <KindBadge kind={k} size={52} />
+                    {t(`road.kinds.${k}`)}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setKind(null)}
+                  aria-label={t("road.back")}
+                  className="glass-tile grid h-11 w-11 shrink-0 place-items-center rounded-full"
+                >
+                  <ChevronLeft className="h-6 w-6" />
+                </button>
+                <KindBadge kind={kind} size={44} />
+                <DrawerTitle className="text-tagline font-semibold">{t(`road.kinds.${kind}`)}</DrawerTitle>
+              </div>
+              <DrawerDescription className="sr-only">{t("road.hint")}</DrawerDescription>
+              {ROAD_SUBS[kind].map((group, gi) => (
+                <div key={gi} className="mt-4">
+                  {ROAD_SUBS[kind].length > 1 && (
+                    <p className="mb-2 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
+                      {t(`road.groups.${gi === 0 ? "road" : "weather"}`)}
+                    </p>
+                  )}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {group.map((sub) => (
+                      <button
+                        key={sub}
+                        type="button"
+                        onClick={() => onPick(kind, sub)}
+                        aria-label={t(`road.subs.${kind}.${sub}`)}
+                        className="glass-tile flex h-24 flex-col items-center justify-center gap-1.5 rounded-3xl px-1 text-center text-footnote font-semibold leading-tight active:scale-[0.98]"
+                      >
+                        <KindBadge kind={kind} size={36} />
+                        {t(`road.tiles.${kind}.${sub}`)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
               <button
-                key={k}
                 type="button"
-                onClick={() => onPick(k)}
-                className="flex h-28 flex-col items-center justify-center gap-2 rounded-3xl bg-secondary text-body font-semibold active:scale-[0.98]"
+                onClick={() => onPick(kind, null)}
+                className="mt-4 flex h-14 w-full items-center justify-center rounded-full text-body font-semibold text-white"
+                style={{ background: ROAD_COLOR[kind] }}
               >
-                <KindBadge kind={k} size={52} />
-                {t(`road.kinds.${k}`)}
+                {t("road.general", { kind: t(`road.kinds.${kind}`) })}
               </button>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </DrawerContent>
     </Drawer>
@@ -80,11 +157,13 @@ export function RoadDetailSheet({
   onClose,
   onVote,
   onAbuse,
+  onWithdraw,
 }: {
   report: RoadReport | null;
   onClose: () => void;
   onVote: (r: RoadReport, v: 1 | -1) => void;
   onAbuse: (r: RoadReport) => void;
+  onWithdraw: (r: RoadReport) => void;
 }) {
   const { t, i18n } = useTranslation();
   return (
@@ -95,7 +174,7 @@ export function RoadDetailSheet({
             <div className="flex items-center gap-4">
               <KindBadge kind={report.kind} size={56} />
               <div className="min-w-0 flex-1">
-                <DrawerTitle className="text-tagline font-semibold">{t(`road.kinds.${report.kind}`)}</DrawerTitle>
+                <DrawerTitle className="text-tagline font-semibold">{roadLabel(t, report.kind, report.sub)}</DrawerTitle>
                 <DrawerDescription className="text-caption text-muted-foreground">
                   {[t("road.ago", { when: timeAgoShort(report.created_at, i18n.language) }), report.up ? t("road.confirmations", { count: report.up }) : null, report.mine ? t("road.yours") : null]
                     .filter(Boolean)
@@ -103,6 +182,15 @@ export function RoadDetailSheet({
                 </DrawerDescription>
               </div>
             </div>
+            {report.mine && (
+              <button
+                type="button"
+                onClick={() => onWithdraw(report)}
+                className="glass-tile mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-full font-semibold"
+              >
+                <Trash2 className="h-5 w-5" /> {t("road.withdraw")}
+              </button>
+            )}
             {!report.mine && (
               <>
                 <p className="mt-5 text-callout font-semibold">{t("road.stillThere")}</p>
@@ -142,7 +230,7 @@ export function RoadAheadChip({ report, distance }: { report: RoadReport; distan
   return (
     <div role="status" data-testid="road-ahead" className="flex items-center gap-3 rounded-full bg-[#1c1c1e]/90 py-2 pl-2 pr-5 text-white shadow-float backdrop-blur-xl">
       <KindBadge kind={report.kind} size={36} />
-      <span className="text-callout font-semibold">{t("road.ahead", { kind: t(`road.kinds.${report.kind}`), distance: formatDistance(distance, i18n.language) })}</span>
+      <span className="text-callout font-semibold">{t("road.ahead", { kind: roadLabel(t, report.kind, report.sub), distance: formatDistance(distance, i18n.language) })}</span>
     </div>
   );
 }
@@ -159,7 +247,7 @@ export function RoadAskCard({ report, onVote, onDismiss }: { report: RoadReport;
       <div className="flex items-center gap-3">
         <KindBadge kind={report.kind} size={40} />
         <p className="text-body font-semibold">
-          {t(`road.kinds.${report.kind}`)} — {t("road.stillThere")}
+          {roadLabel(t, report.kind, report.sub)} — {t("road.stillThere")}
         </p>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">

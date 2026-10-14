@@ -7,12 +7,32 @@ import type { PreparedRoute } from "@/lib/nav/route";
  * enough for your speed) and when to ask "still there?" (once, as you pass it).
  */
 
-export type RoadKind = "accident" | "police" | "hazard" | "traffic" | "closed";
-export const ROAD_KINDS: RoadKind[] = ["accident", "police", "hazard", "traffic", "closed"];
+export type RoadKind = "traffic" | "police" | "accident" | "hazard" | "closed" | "camera" | "help";
+/** In the order of the report sheet's tiles (Waze's). */
+export const ROAD_KINDS: RoadKind[] = ["traffic", "police", "accident", "hazard", "closed", "camera", "help"];
+
+/**
+ * The details you can add (one more tap), per kind — the server checks the same list (private.road_sub_ok). Hazards
+ * come in two groups: on the road, and weather. "other_side": seen on the opposite carriageway.
+ */
+export const ROAD_SUBS: Record<RoadKind, readonly (readonly string[])[]> = {
+  traffic: [["moderate", "heavy", "standstill"]],
+  police: [["visible", "hidden", "other_side"]],
+  accident: [["minor", "major", "other_side"]],
+  hazard: [
+    ["object", "pothole", "roadwork", "light_out", "stopped_car", "animal", "shoulder"],
+    ["fog", "flood", "ice", "hail"],
+  ],
+  closed: [],
+  camera: [["speed", "red_light"]],
+  help: [["tire", "battery", "fuel", "other"]],
+};
 
 export interface RoadReport extends LatLng {
   id: string;
   kind: RoadKind;
+  /** The detail (ROAD_SUBS), or null for a general report. */
+  sub: string | null;
   /** Direction of travel of the reporter (degrees), or null. */
   heading: number | null;
   created_at: string;
@@ -42,7 +62,9 @@ export function alongRoute(r: PreparedRoute, along: number, rep: RoadReport): nu
     if (!best || p.dist < best.dist) best = { at, dist: p.dist, i };
   }
   if (!best || best.at < along - 30) return null;
-  if (rep.heading != null && angleDiff(rep.heading, bearing(r.pts[best.i], r.pts[best.i + 1])) > OPPOSITE_DEG) return null;
+  // Reported for the other carriageway: it applies to those driving opposite to the reporter.
+  const heading = rep.heading == null ? null : rep.sub === "other_side" ? (rep.heading + 180) % 360 : rep.heading;
+  if (heading != null && angleDiff(heading, bearing(r.pts[best.i], r.pts[best.i + 1])) > OPPOSITE_DEG) return null;
   return best.at;
 }
 
