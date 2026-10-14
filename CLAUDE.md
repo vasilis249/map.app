@@ -374,3 +374,18 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Not verified: everything on a real iPhone (speed limits / speeding voice on a real drive, the drive-off parking
   question with real GPS speed, glass rendering + its cost on the GPU), real traffic volumes on the free tiers, Stadia
   free plan limits (commercial use needs Starter).
+
+### P8 — spot exchange, the SpotSmiley logic (done in the browser; live deploy after the owner runs the migration)
+- Read spotsmiley.gr, its terms / privacy page and App Store listing: offer when leaving → credit; claim with a credit
+  ("Offer First"); real-time match with a "Spot Mate", chat, voice guidance, swap; points + leaderboard; points aren't
+  money; fake offers penalised. Applied with the owner's choices: 1 starter credit, quick messages + push-to-talk instead
+  of typed chat, plate required only for exchanges (D32).
+- Plate legality (my reading, not legal advice; for the lawyer): a plate is personal data when linked to a driver; OK on
+  the user's own entry for a stated purpose, minimised (mate only, active exchange only, not searchable), deleted with
+  the account, described in the privacy policy.
+- SQL: + spot 36 → 276 PASS in all. Unit 53. Browser: whole suite PASS — auth 23, map 27, social 25, walkie 12 + 7 + 6 +
+  13 + 5, nearby 16, nav 48, reports 24, parking 13, spot 23 (new: vehicle form, offer, claim, both panels with plates,
+  voice, quick message, talk at 270 m, arrival, done → credits / points, leaderboard, no plate for a third person),
+  release 12 = 254 checks, no page errors.
+- Not verified: real phones (the giver's screen kept on, background, real GPS arrival), two strangers really meeting,
+  push notifications (none yet: a closed app hears nothing — proposed next), the lawyer's view on plates.
