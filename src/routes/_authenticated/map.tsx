@@ -21,6 +21,10 @@ import { DestParkingChip, ParkingAskCard, ParkingDetailSheet, ParkingSheet } fro
 import { leaveSpot, markTaken, ParkingApiError, parkHere, useParking } from "@/lib/parking/api";
 import { carStale, droveOff, freeNear, readCar, saveCar, type ParkingSpot } from "@/lib/parking/parking";
 import { haversine } from "@/lib/nav/geo";
+import { GiveSpot, MatchPanel, OfferSheet, OfferWaiting } from "@/components/spot/spot-ui";
+import { claimSpot, offerSpot, SpotApiError, spotCancel, spotDone, spotKeys, spotMessage, spotUpdate, useSpotOffers, useSpotState, type SpotMsg } from "@/lib/spot/api";
+import { speechEngine } from "@/lib/nav/speech";
+import { keepAwake } from "@/lib/nav/wake-lock";
 import { toast } from "sonner";
 import type { Place } from "@/lib/nav/route";
 import { announce, chooseRoute, planTo, rerouteNow, setAvoid, stopNav, useNav, type NavTexts } from "@/lib/nav/session";
@@ -326,6 +330,124 @@ function MapPage() {
     navActive && nav.dest && nav.progress && nav.progress.remaining < 1_500 && !nav.dest.id.startsWith("parking:")
       ? freeNear(spots, nav.dest)[0]
       : undefined;
+  // Spot exchange (P8, SpotSmiley logic): offers on the map, my offer / my exchange at the bottom.
+  const spot = useSpotState();
+  const sx = spot.data;
+  const match = sx?.match?.state === "active" ? sx.match : undefined;
+  const myOffer = sx?.offer?.state === "open" ? sx.offer : undefined;
+  const offers = useSpotOffers(me, !match);
+  const [offerOpen, setOfferOpen] = useState<string | null>(null);
+  const spotError = (e: unknown) => toast.error(t(e instanceof SpotApiError && e.code !== "generic" ? `spot.errors.${e.code}` : "errors.generic"));
+  const refreshSpot = () => {
+    void qc.invalidateQueries({ queryKey: spotKeys.state });
+    void qc.invalidateQueries({ queryKey: ["spot", "offers"] });
+  };
+  const say = (text: string) => {
+    if (!nav.muted) void speechEngine(i18n.language).speak(text);
+  };
+  const give = (inMin: 0 | 2 | 5 | 10) => {
+    setParkingOpen(false);
+    const car = readCar();
+    const at = car && !carStale(car, Date.now()) && me && haversine(car, me) <= 150 ? car : me;
+    if (!at) return void toast(t("road.errors.no_position"));
+    offerSpot(at, inMin)
+      .then(() => {
+        toast(t("spot.offered"));
+        saveCar(null);
+        refreshSpot();
+      })
+      .catch(spotError);
+  };
+  const claim = (id: string) => {
+    const o = (offers.data ?? []).find((x) => x.id === id);
+    setOfferOpen(null);
+    if (!me || !o) return;
+    claimSpot(id, me)
+      .then(() => {
+        refreshSpot();
+        // straight to the route choices for the spot
+        planFrom({ id: `spot:${id}`, name: t("spot.offerTitle"), detail: "", lat: o.lat, lng: o.lng });
+      })
+      .catch((e) => {
+        spotError(e);
+        refreshSpot();
+      });
+  };
+  const spotAct = (f: () => Promise<void>) => () => void f().then(refreshSpot, spotError);
+  // While an exchange runs: my position (and as the taker my ETA) to the server every 2 s, for my mate's map.
+  const fixRef = useRef<{ lat: number; lng: number } | null>(null);
+  fixRef.current = me;
+  const etaRef = useRef<number | null>(null);
+  etaRef.current = navActive && nav.progress && nav.dest?.id.startsWith("spot:") ? nav.progress.eta_s : null;
+  const matchId = match?.id;
+  useEffect(() => {
+    if (!matchId) return;
+    const tick = () => {
+      const at = fixRef.current;
+      if (!at) return;
+      const eta = etaRef.current ?? (match?.role === "taker" && sx?.offer ? haversine(at, sx.offer) / 7 : null);
+      void spotUpdate(at, eta).catch(() => undefined);
+    };
+    tick();
+    const id = setInterval(tick, 2_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
+  // The screen stays on while someone may be coming for my spot (no push notifications yet).
+  const waitingOnMe = !!myOffer || match?.role === "giver";
+  useEffect(() => {
+    if (!waitingOnMe) return;
+    keepAwake(true);
+    return () => keepAwake(false);
+  }, [waitingOnMe]);
+  // Voice + notices: matched, a quick message, arrival, the end.
+  const seen = useRef<Record<string, string>>({});
+  useEffect(() => {
+    const m = sx?.match;
+    if (!m) return;
+    const first = (m.mate.full_name || m.mate.username).split(" ")[0];
+    const once = (key: string, f: () => void) => {
+      if (seen.current[key]) return;
+      seen.current[key] = "1";
+      f();
+    };
+    if (m.state === "active") {
+      once(`${m.id}:start`, () => {
+        const text = t(m.role === "giver" ? "spot.sayMatchedGiver" : "spot.sayMatchedTaker", { name: first });
+        toast(text);
+        say(text);
+      });
+      if (m.mate_msg && m.mate_msg_at)
+        once(`${m.id}:msg:${m.mate_msg_at}`, () => {
+          const text = t("spot.says", { name: first, msg: t(`spot.msgs.${m.mate_msg}`) });
+          toast(text);
+          say(text);
+        });
+      if (m.role === "giver" && m.arrived_at) once(`${m.id}:arrived`, () => say(t("spot.sayArrived", { name: first })));
+      return;
+    }
+    once(`${m.id}:end`, () => {
+      const msg =
+        m.state === "done"
+          ? t(m.role === "giver" ? "spot.doneGiver" : "spot.doneTaker")
+          : m.state === "cancelled"
+            ? t(m.ended_by_me ? "spot.cancelledByMe" : "spot.cancelledByMate")
+            : m.state === "no_show"
+              ? t("spot.noShow")
+              : t("spot.expired");
+      toast(msg);
+      // the taker parked there: remember the car (for "did you free your spot?" later)
+      if (m.state === "done" && m.role === "taker" && sx?.offer) saveCar({ lat: sx.offer.lat, lng: sx.offer.lng, at: Date.now() });
+      void qc.invalidateQueries({ queryKey: ["spot", "offers"] });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sx?.match?.id, sx?.match?.state, sx?.match?.mate_msg_at, sx?.match?.arrived_at]);
+  const offerPins = (offers.data ?? []).map((o) => {
+    const min = Math.max(0, Math.round((new Date(o.leave_at).getTime() - Date.now()) / 60_000));
+    return { id: `offer:${o.id}`, state: "offer" as const, lat: o.lat, lng: o.lng, badge: min ? `${min}′` : t("spot.in_0") };
+  });
+  const matePin = match?.mate_pos ? [{ id: `mate:${match.id}`, state: "mate" as const, lat: match.mate_pos.lat, lng: match.mate_pos.lng }] : [];
+  const spotPin = match && sx?.offer ? [{ id: `myspot:${match.id}`, state: "offer" as const, lat: sx.offer.lat, lng: sx.offer.lng }] : [];
   const goToSpot = (s: ParkingSpot) => {
     setSpotOpen(null);
     if (navActive) stopNav();
@@ -378,9 +500,14 @@ function MapPage() {
         roads={roadList}
         roadLabel={(k) => t(`road.kinds.${k}`)}
         onSelectRoad={setRoadOpen}
-        parking={spots}
-        parkingLabel={(st) => t(`parking.label_${st}`)}
-        onSelectParking={setSpotOpen}
+        parking={[...spots, ...offerPins, ...spotPin, ...matePin]}
+        parkingLabel={(st) =>
+          st === "offer" ? t("spot.offerTitle") : st === "mate" ? (match ? match.mate.full_name || match.mate.username : "") : t(`parking.label_${st}`)
+        }
+        onSelectParking={(id) => {
+          if (id.startsWith("offer:")) setOfferOpen(id.slice(6));
+          else if (!id.includes(":")) setSpotOpen(id);
+        }}
         nav={
           navActive && nav.route && nav.dest
             ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion, traffic: jamLines }
@@ -481,8 +608,23 @@ function MapPage() {
         </div>
 
         {navActive && roadAsk && <RoadAskCard report={roadAsk} onVote={(v) => voteRoad(roadAsk, v)} onDismiss={() => setRoadAsk(null)} />}
-        {destSpot && !askParked && <DestParkingChip distance={destSpot.distance} onGo={() => goToSpot(destSpot.spot)} />}
-        {askParked && (
+        {destSpot && !askParked && !match && <DestParkingChip distance={destSpot.distance} onGo={() => goToSpot(destSpot.spot)} />}
+        {myOffer && !match && <OfferWaiting leaveAt={myOffer.leave_at} onCancel={spotAct(() => spotCancel())} />}
+        {match && sx && (
+          <MatchPanel
+            state={sx}
+            me={me}
+            onMsg={(m: SpotMsg) => void spotMessage(m).then(refreshSpot, spotError)}
+            onNavigate={() => sx.offer && planFrom({ id: `spot:${sx.offer.id}`, name: t("spot.offerTitle"), detail: "", lat: sx.offer.lat, lng: sx.offer.lng })}
+            onDone={spotAct(async () => {
+              await spotDone();
+              if (navActive) stopNav();
+            })}
+            onCancel={spotAct(() => spotCancel())}
+            onNoShow={spotAct(() => spotCancel(true))}
+          />
+        )}
+        {askParked && !match && (
           <ParkingAskCard state="taken" testId="ask-parked" question={t("parking.askParked")} yes={t("parking.yesParked")} onYes={park} onNo={() => setAskParked(false)} />
         )}
         {askFreed && !askParked && (
@@ -502,7 +644,7 @@ function MapPage() {
         {navActive && <NavFooter nav={nav} delay_s={traffic.delay_s} />}
         {planning && <RoutePreview nav={nav} texts={navTexts} onReplan={() => nav.dest && planFrom(nav.dest)} />}
 
-        {on && view === "friends" && plain && (
+        {on && view === "friends" && plain && !match && !myOffer && (
           <div className="max-w-full self-start rounded-3xl glass p-3">
             {friends.length ? (
               <ul className="flex gap-3 overflow-x-auto px-0.5 py-1" aria-label={t("map.friendsTab")}>
@@ -526,7 +668,7 @@ function MapPage() {
           </div>
         )}
 
-        {on && view === "nearby" && plain && (
+        {on && view === "nearby" && plain && !match && !myOffer && (
           <button
             type="button"
             onClick={() => setListOpen(true)}
@@ -550,7 +692,7 @@ function MapPage() {
         )}
 
         {/* sharing off, or no position yet */}
-        {s && !on && plain && (
+        {s && !on && plain && !match && !myOffer && (
           <div className="rounded-3xl glass p-5">
             <p className="flex items-center gap-2 text-body font-semibold">
               <MapPin className="h-5 w-5 text-link" /> {t("map.offTitle")}
@@ -724,7 +866,36 @@ function MapPage() {
           setParkingOpen(true);
         }}
       />
-      <ParkingSheet open={parkingOpen} onOpenChange={setParkingOpen} onLeave={leave} onPark={park} />
+      <ParkingSheet
+        open={parkingOpen}
+        onOpenChange={setParkingOpen}
+        onLeave={leave}
+        onPark={park}
+        top={
+          !match && !myOffer ? (
+            <GiveSpot
+              onGive={give}
+              hasVehicle={!!sx?.wallet.vehicle}
+              onAddVehicle={() => {
+                setParkingOpen(false);
+                void navigate({ to: "/exchange" });
+              }}
+            />
+          ) : null
+        }
+      />
+      <OfferSheet
+        offer={(offers.data ?? []).find((o) => o.id === offerOpen) ?? null}
+        me={me}
+        credits={sx?.wallet.credits ?? 0}
+        hasVehicle={!!sx?.wallet.vehicle}
+        onClose={() => setOfferOpen(null)}
+        onClaim={(o) => claim(o.id)}
+        onAddVehicle={() => {
+          setOfferOpen(null);
+          void navigate({ to: "/exchange" });
+        }}
+      />
       <ParkingDetailSheet
         spot={spots.find((x) => x.id === spotOpen) ?? null}
         onClose={() => setSpotOpen(null)}

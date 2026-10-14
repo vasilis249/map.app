@@ -61,7 +61,8 @@ notifications (follow | nearby | walkie; one row per actor+kind, moved to top) �
 location_sharing (off | friends | everyone; talk_from everyone | following | nobody) · private.user_locations (latest
 only) · private.nearby_knocks / nearby_messages (+ private.nearby_audio, 24 h) · walkie_messages (+ private.walkie_audio,
 24 h) · walkie_contacts (channel on ≤ 10, seen_at) · private.walkie_diag · private.rate_events · storage bucket `avatars` ·
-private.road_reports (+ sub, P7) / road_votes / road_strikes (P5) · private.parking_spots (P7) · user_locations.vehicle_at
+private.road_reports (+ sub, P7) / road_votes / road_strikes (P5) · private.parking_spots (P7) · private.vehicles / spot_wallets / spot_offers / spot_matches / spot_points /
+spot_strikes (P8) · user_locations.vehicle_at
 (P4: 3D cars).
 Realtime: private channels `walkie:<a>:<b>`, `nearby:<a>:<b>` (a < b) and inbox `nearby-in:<uid>` (read-only,
 written by `realtime.send` from `nearby_knock`), authorized by policies on `realtime.messages`.
@@ -223,6 +224,17 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
   top rim, sheen, own hairline + shadow — no border / shadow classes beside it), `glass-sheet` (denser, for bottom
   sheets: floating, inset 8 px, 36 px corners), `glass-pill` (the selected tab / segment), `glass-tile` (buttons on
   glass). Floating tab bar with icon + label, the current tab in a tinted droplet.
+- D32 (P8, owner request: "connect users for parking", the SpotSmiley concept) Spot exchange: `private.vehicles` (plate
+  normalized to A–Z/0–9 with Greek look-alikes as Latin, shown back in Greek "ΙΚΑ-1234"; colour from a list; make
+  optional; a lawful-use declaration), required only for exchanges. Offer ("Δίνω τη θέση μου": now / 2 / 5 / 10′) → claim
+  ("Τη θέλω", 1 credit, first wins under a row lock, ≤ 5 km) → spot mates: name, photo, car + plate (ONLY to the mate,
+  ONLY while active — personal data), live positions on the match row (cleared when it ends), taker ETA, arrival ≤ 60 m,
+  one-tap quick messages (no typing while driving) + push-to-talk at any distance (`may_send_nearby` OR
+  `spot_mates`); "Πάρκαρα ✓" by the taker → giver +1 credit +10 points, taker +5. Everyone starts with 1 credit
+  (owner's choice), then give to get. Cancel / no-show rules + strikes (3 a week → a day off); reliability %; weekly
+  leaderboard; a block ends an exchange; cron expire-spots each minute (open offers 10′ late, exchanges 30′); rows
+  30 days. Polling (2 s in an exchange, 3 s with an open offer); the screen stays on while someone may come (no push
+  yet — the giver keeps the app open, like SpotSmiley). Screen: Profile → "Το όχημά μου & ανταλλαγές" (`/exchange`).
 - Routing for now: still Stadia only (owner chose the free Stadia key over the public FOSSGIS / Photon services, which
   would be new processors of trip data); until the key is set the Worker answers "unavailable".
 - Icon (P6): `design/icon.svg` (navigation arrow + voice waves, no name), rendered by `scripts/make-icons.mjs`.

@@ -14,8 +14,10 @@ Tick each line; anything not done is a reason not to ship. Owner = you (decision
 ## 2. Backend (dev, with the owner's accounts)
 - [x] Supabase: run `supabase/migrations/20261011100000_baseline.sql` (from now on only NEW migrations — D11 ends).
 - [ ] Supabase SQL Editor: run the NEW migrations in order — `20261014120000_road_catalog.sql` (Waze catalog),
-      `20261014130000_parking.sql` (parking; schedules cron `expire-parking`). Check: `select jobname from cron.job;`
-      lists 6 jobs.
+      `20261014130000_parking.sql` (parking; schedules cron `expire-parking`) — both run 2026-10-14 —, then
+      `20261015100000_spot_exchange.sql` (spot exchange; cron `expire-spots` every minute). Check:
+      `select jobname from cron.job;` lists 7 jobs.
+- [ ] Lawyer: the plate / vehicle data and the exchange (privacy policy section, "points aren't money") — D32.
 - [ ] Extensions: `pg_cron` on **before** the migration (else re-run its last `DO $cron$` block): jobs expire-locations,
       expire-nearby, expire-walkie, expire-misc, expire-road.
 - [ ] Realtime → "Allow public access" **off** (private channels only).

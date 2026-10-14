@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Ban, Camera, ChevronRight, MapPin, ShieldCheck } from "lucide-react";
+import { Ban, Camera, Car, ChevronRight, MapPin, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { AppHeader } from "@/components/app-header";
 import { FollowCounts } from "@/components/people/follow-counts";
@@ -144,6 +144,11 @@ function MyProfilePage() {
             <Link to="/location" className="flex items-center gap-3 px-4 py-3.5">
               <MapPin className="h-5 w-5 text-link" />
               <span className="flex-1 font-semibold">{t("profile.location")}</span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </Link>
+            <Link to="/exchange" className="flex items-center gap-3 px-4 py-3.5">
+              <Car className="h-5 w-5 text-link" />
+              <span className="flex-1 font-semibold">{t("spot.menu")}</span>
               <ChevronRight className="h-4 w-4 text-muted-foreground" />
             </Link>
             <Link to="/blocked" className="flex items-center gap-3 px-4 py-3.5">

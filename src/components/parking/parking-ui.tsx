@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigation } from "lucide-react";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
@@ -28,11 +28,14 @@ export function ParkingSheet({
   onOpenChange,
   onLeave,
   onPark,
+  top,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onLeave: () => void;
   onPark: () => void;
+  /** Above the two: "Give my spot" (exchange, P8). */
+  top?: ReactNode;
 }) {
   const { t } = useTranslation();
   return (
@@ -42,6 +45,7 @@ export function ParkingSheet({
           <DrawerTitle className="text-tagline font-semibold">{t("parking.title")}</DrawerTitle>
           <DrawerDescription className="text-caption text-muted-foreground">{t("parking.hint")}</DrawerDescription>
           <div className="mt-4 grid gap-3">
+            {top}
             <button type="button" onClick={onLeave} className="glass-tile flex h-20 items-center gap-4 rounded-3xl px-4 text-left active:scale-[0.98]">
               <ParkingBadge state="free" size={48} />
               <span>

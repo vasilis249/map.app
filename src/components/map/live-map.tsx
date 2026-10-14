@@ -109,12 +109,17 @@ const ROAD_COLORS: Record<MapRoad["kind"], string> = {
   help: "#30b0c7",
 };
 
-/** A parking spot (P7): green = just freed, red = taken. */
+/**
+ * A parking pin (P7 / P8): green = just freed, red = taken, offer = a spot offered for exchange (green with the minutes
+ * left), mate = your spot mate's car during an exchange.
+ */
 export interface MapParking {
   id: string;
-  state: "free" | "taken";
+  state: "free" | "taken" | "offer" | "mate";
   lat: number;
   lng: number;
+  /** Small text on the pin ("3′"), offers only. */
+  badge?: string;
 }
 
 function parkingElement(p: MapParking, label: string, onSelect: (id: string) => void): HTMLElement {
@@ -122,9 +127,16 @@ function parkingElement(p: MapParking, label: string, onSelect: (id: string) => 
   btn.type = "button";
   btn.setAttribute("aria-label", label);
   btn.dataset.parking = p.state;
-  btn.className = "grid h-8 w-8 place-items-center rounded-lg border-2 border-white text-[15px] font-extrabold text-white shadow-float";
-  btn.style.background = p.state === "free" ? "#30d158" : "#ff3b30";
-  btn.textContent = "P";
+  const mate = p.state === "mate";
+  btn.className = `relative grid place-items-center border-2 border-white font-extrabold text-white shadow-float ${mate ? "h-10 w-10 rounded-full text-[18px]" : "h-8 w-8 rounded-lg text-[15px]"}`;
+  btn.style.background = p.state === "taken" ? "#ff3b30" : mate ? "#0a84ff" : "#30d158";
+  btn.textContent = mate ? "🚗" : "P";
+  if (p.badge) {
+    const b = document.createElement("span");
+    b.className = "absolute -right-3 -top-2 rounded-full bg-white px-1 text-[10px] font-bold leading-[16px] text-[#0b7a2f] shadow";
+    b.textContent = p.badge;
+    btn.appendChild(b);
+  }
   btn.addEventListener("click", (e) => {
     e.stopPropagation();
     onSelect(p.id);
@@ -741,7 +753,7 @@ export function LiveMap({
     const seen = new Set<string>();
     for (const p of list) {
       seen.add(p.id);
-      const sig = `${p.state}|${p.lat}|${p.lng}`;
+      const sig = `${p.state}|${p.lat}|${p.lng}|${p.badge ?? ""}`;
       const cur = parkingMarkers.current.get(p.id);
       if (cur?.sig === sig) continue;
       cur?.marker.remove();
@@ -787,7 +799,7 @@ export function LiveMap({
   useEffect(sync, [me?.lat, me?.lng, me?.accuracy, me?.live, meFace.name, meFace.path, people, radius, talkingKey]);
   const roadsKey = roads.map((r) => `${r.id}${r.kind}`).join();
   useEffect(drawRoads, [roadsKey]);
-  const parkingKey = parking.map((p) => `${p.id}${p.state}${p.lat}`).join();
+  const parkingKey = parking.map((p) => `${p.id}${p.state}${p.lat}${p.lng}${p.badge ?? ""}`).join();
   useEffect(drawParking, [parkingKey]);
   const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
   const trafficKey = (nav?.traffic ?? []).map((j) => `${j.level}:${j.coords.length}:${j.coords[0]?.join()}`).join("|");

@@ -17,6 +17,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedBlockedRouteImport } from './routes/_authenticated/blocked'
+import { Route as AuthenticatedExchangeRouteImport } from './routes/_authenticated/exchange'
 import { Route as AuthenticatedLocationRouteImport } from './routes/_authenticated/location'
 import { Route as AuthenticatedMapRouteImport } from './routes/_authenticated/map'
 import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authenticated/notifications'
@@ -64,6 +65,11 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
 const AuthenticatedBlockedRoute = AuthenticatedBlockedRouteImport.update({
   id: '/blocked',
   path: '/blocked',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedExchangeRoute = AuthenticatedExchangeRouteImport.update({
+  id: '/exchange',
+  path: '/exchange',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedLocationRoute = AuthenticatedLocationRouteImport.update({
@@ -122,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/blocked': typeof AuthenticatedBlockedRoute
+  '/exchange': typeof AuthenticatedExchangeRoute
   '/location': typeof AuthenticatedLocationRoute
   '/map': typeof AuthenticatedMapRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -140,6 +147,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/blocked': typeof AuthenticatedBlockedRoute
+  '/exchange': typeof AuthenticatedExchangeRoute
   '/location': typeof AuthenticatedLocationRoute
   '/map': typeof AuthenticatedMapRoute
   '/notifications': typeof AuthenticatedNotificationsRoute
@@ -160,6 +168,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/blocked': typeof AuthenticatedBlockedRoute
+  '/_authenticated/exchange': typeof AuthenticatedExchangeRoute
   '/_authenticated/location': typeof AuthenticatedLocationRoute
   '/_authenticated/map': typeof AuthenticatedMapRoute
   '/_authenticated/notifications': typeof AuthenticatedNotificationsRoute
@@ -180,6 +189,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/admin'
     | '/blocked'
+    | '/exchange'
     | '/location'
     | '/map'
     | '/notifications'
@@ -198,6 +208,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/admin'
     | '/blocked'
+    | '/exchange'
     | '/location'
     | '/map'
     | '/notifications'
@@ -217,6 +228,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/_authenticated/admin'
     | '/_authenticated/blocked'
+    | '/_authenticated/exchange'
     | '/_authenticated/location'
     | '/_authenticated/map'
     | '/_authenticated/notifications'
@@ -295,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBlockedRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/exchange': {
+      id: '/_authenticated/exchange'
+      path: '/exchange'
+      fullPath: '/exchange'
+      preLoaderRoute: typeof AuthenticatedExchangeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/location': {
       id: '/_authenticated/location'
       path: '/location'
@@ -364,6 +383,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRoute
   AuthenticatedBlockedRoute: typeof AuthenticatedBlockedRoute
+  AuthenticatedExchangeRoute: typeof AuthenticatedExchangeRoute
   AuthenticatedLocationRoute: typeof AuthenticatedLocationRoute
   AuthenticatedMapRoute: typeof AuthenticatedMapRoute
   AuthenticatedNotificationsRoute: typeof AuthenticatedNotificationsRoute
@@ -378,6 +398,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRoute,
   AuthenticatedBlockedRoute: AuthenticatedBlockedRoute,
+  AuthenticatedExchangeRoute: AuthenticatedExchangeRoute,
   AuthenticatedLocationRoute: AuthenticatedLocationRoute,
   AuthenticatedMapRoute: AuthenticatedMapRoute,
   AuthenticatedNotificationsRoute: AuthenticatedNotificationsRoute,

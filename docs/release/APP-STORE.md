@@ -13,7 +13,8 @@ Tracking: **No** (no ads, no analytics SDK, no data broker, no tracking domains)
 | Email Address | Yes | Yes | No | App Functionality | Sign-in |
 | Name | Yes | Yes | No | App Functionality | Profile name, username |
 | Photos or Videos | Yes | Yes | No | App Functionality | Profile photo (re-encoded, no EXIF; old ones removed) |
-| Other User Content | Yes | Yes | No | App Functionality | Bio, road reports, abuse reports |
+| Other User Content | Yes | Yes | No | App Functionality | Bio, road reports, abuse reports, quick messages in a spot exchange |
+| Other Data (vehicle) | Yes | Yes | No | App Functionality | Plate, colour, make for spot exchanges — shown only to the exchange partner while it runs |
 | User ID | Yes | Yes | No | App Functionality | Account id |
 | Search History | Yes | **No** | No | App Functionality | Destination search text → routing provider; cached ≤ 1 day without identity |
 
