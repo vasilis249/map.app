@@ -37,6 +37,16 @@ export function createNavigator(route: NavRoute, opts: AnnouncerOptions & { rero
       }
       return { progress: p, say: announcer.next(p, fix.speed), reroute };
     },
+    /**
+     * Ask for a new route now although you're on this one (a closed road reported ahead). False while one is already
+     * on its way.
+     */
+    requestReroute(t: number): boolean {
+      if (rerouting) return false;
+      rerouting = true;
+      lastReroute = t;
+      return true;
+    },
     /** The new route arrived (null: the request failed — try again after the gap). */
     rerouted(next: NavRoute | null) {
       rerouting = false;

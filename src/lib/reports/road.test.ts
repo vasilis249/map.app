@@ -5,7 +5,8 @@ import { routePoint } from "@/lib/nav/motion";
 import { createProgress } from "@/lib/nav/progress";
 import { parseValhalla, prepareRoute } from "@/lib/nav/route";
 import { drive } from "@/lib/nav/testing/sim";
-import { alertDistance, alongRoute, createReportAlerts, relevant, ROAD_KINDS, ROAD_SUBS, type RoadReport } from "./road";
+import { alertDistance, alongRoute, closures, createReportAlerts, relevant, ROAD_KINDS, ROAD_SUBS, routeSlice, trafficAhead, type RoadReport } from "./road";
+import { haversine } from "@/lib/nav/geo";
 
 const r = prepareRoute(parseValhalla(athens)[0]);
 /** A report `side` metres beside the route at `at` metres along it, reported by someone going `dir` (+1 our way). */
@@ -77,5 +78,40 @@ describe("warnings while navigating", () => {
     expect(alertDistance(5)).toBe(300);
     expect(alertDistance(20)).toBe(600);
     expect(alertDistance(40)).toBe(1000);
+  });
+});
+
+describe("traffic on the route", () => {
+  it("jams ahead: coloured from 250 m before the report to 50 m after; overlapping ones merge (worse level); delay added once each", () => {
+    const list = [
+      rep("t1", 900, 8, 1, { kind: "traffic", sub: "moderate" }),
+      rep("t2", 1000, 8, 1, { kind: "traffic", sub: "standstill" }),
+      rep("t3", 2000, 8, 1, { kind: "traffic", sub: null }),
+      rep("police", 1500),
+    ];
+    const { jams, delay_s } = trafficAhead(relevant(list, routePoint(r, 0), r, 0), 0);
+    expect(jams).toHaveLength(2);
+    expect(jams[0].level).toBe(3);
+    expect(jams[0].from).toBeCloseTo(650, -1);
+    expect(jams[0].to).toBeCloseTo(1050, -1);
+    expect(jams[1].level).toBe(2);
+    expect(delay_s).toBe(300 + 180);
+    // already in it: starts where you are
+    const inside = trafficAhead(relevant(list, routePoint(r, 800), r, 800), 800);
+    expect(inside.jams[0].from).toBe(800);
+  });
+  it("the line of a stretch follows the route between the two distances", () => {
+    const line = routeSlice(r, 650, 1050);
+    expect(line.length).toBeGreaterThan(2);
+    const [a, b] = [line[0], line.at(-1)!];
+    expect(haversine({ lng: a[0], lat: a[1] }, routePoint(r, 650))).toBeLessThan(2);
+    expect(haversine({ lng: b[0], lat: b[1] }, routePoint(r, 1050))).toBeLessThan(2);
+    expect(routeSlice(r, 500, 400)).toEqual([]);
+  });
+  it("closed roads to route around: only closures, nearest first, at most 10", () => {
+    const list = [rep("c1", 2000, 8, 1, { kind: "closed" }), rep("p", 100), rep("c2", 300, 8, 1, { kind: "closed" })];
+    const c = closures(list, routePoint(r, 0));
+    expect(c).toHaveLength(2);
+    expect(haversine(c[0], routePoint(r, 300))).toBeLessThan(20);
   });
 });

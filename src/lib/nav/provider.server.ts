@@ -21,10 +21,37 @@ function config() {
 
 const valhallaLang = (lang: string) => (lang === "en" ? "en-US" : "el-GR");
 
+/** What to avoid: toll roads, motorways, and points to stay off (closed roads reported on the map). */
+export interface RouteOptions {
+  avoidTolls: boolean;
+  avoidHighways: boolean;
+  avoid: LatLng[];
+}
+
 /** Driving routes from → to (the main one first, up to 2 alternatives). `heading`: where you're going now (reroute). */
-export async function providerRoute(from: LatLng & { heading?: number }, to: LatLng, lang: string, alternatives: boolean): Promise<NavRoute[]> {
+export async function providerRoute(
+  from: LatLng & { heading?: number },
+  to: LatLng,
+  lang: string,
+  alternatives: boolean,
+  options: RouteOptions = { avoidTolls: false, avoidHighways: false, avoid: [] },
+): Promise<NavRoute[]> {
+  try {
+    return await routeOnce(from, to, lang, alternatives, options);
+  } catch (e) {
+    // A closed road can make the trip impossible (it's the only way in): then the route through it is better than none.
+    if (e instanceof ProviderError && e.code === "no_route" && options.avoid.length)
+      return routeOnce(from, to, lang, alternatives, { ...options, avoid: [] });
+    throw e;
+  }
+}
+
+async function routeOnce(from: LatLng & { heading?: number }, to: LatLng, lang: string, alternatives: boolean, options: RouteOptions): Promise<NavRoute[]> {
   const { key, base } = config();
   const language = valhallaLang(lang);
+  const auto: Record<string, number> = {};
+  if (options.avoidTolls) auto.use_tolls = 0;
+  if (options.avoidHighways) auto.use_highways = 0;
   const body = {
     locations: [
       // While driving, start in your direction of travel (no route that begins with a U-turn).
@@ -36,6 +63,8 @@ export async function providerRoute(from: LatLng & { heading?: number }, to: Lat
     language,
     directions_options: { units: "kilometers", language },
     ...(alternatives ? { alternates: 2 } : {}),
+    ...(Object.keys(auto).length ? { costing_options: { auto } } : {}),
+    ...(options.avoid.length ? { exclude_locations: options.avoid.map((p) => ({ lat: p.lat, lon: p.lng })) } : {}),
   };
   let res: Response;
   try {

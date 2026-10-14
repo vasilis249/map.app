@@ -75,6 +75,8 @@ export interface MapNav {
   bearing: number | null;
   /** Follow mode: smooth 60 fps arrow + camera between fixes (lib/nav/motion.ts); the line is trimmed behind you. */
   motion?: Motion | null;
+  /** Traffic reported on the route ahead (P7): stretches drawn over the line, 1 moderate · 2 heavy · 3 standstill. */
+  traffic?: { level: 1 | 2 | 3; coords: [number, number][] }[];
   onChoose?: (i: number) => void;
 }
 
@@ -377,6 +379,10 @@ export function LiveMap({
         m.addLayer({ id: "nav-alt", type: "line", source: "nav", filter: ["==", ["get", "chosen"], false], layout: line, paint: { "line-color": "#a9c7f5", "line-width": width(1) } }, labels);
         m.addLayer({ id: "nav-casing", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#0b5bd3", "line-width": width(1.4) } }, labels);
         m.addLayer({ id: "nav-line", type: "line", source: "nav", filter: ["==", ["get", "chosen"], true], layout: line, paint: { "line-color": "#2b8bff", "line-width": width(1) } }, labels);
+        // Traffic on the route (Waze / Google colours), over the blue line.
+        m.addSource("nav-traffic", { type: "geojson", data: empty });
+        m.addLayer({ id: "nav-traffic", type: "line", source: "nav-traffic", layout: line, paint: { "line-color": ["match", ["get", "level"], 1, "#ff9f0a", 2, "#ff3b30", "#a3161a"], "line-width": width(0.72) } }, labels);
+        drawTraffic();
         drawAreas();
         drawNav();
       });
@@ -437,6 +443,17 @@ export function LiveMap({
         .filter((p) => p.accuracy_m != null && p.accuracy_m > 20)
         .map((p) => poly(circle(p, Math.min(p.accuracy_m!, 5000), 36), { color: p.is_friend ? token("--success", "#34c759") : token("--muted-foreground", "#6e6e73") })),
     );
+  }
+
+  function drawTraffic() {
+    const m = map.current;
+    if (!m || !styleReady.current) return;
+    const list = latest.current.nav?.traffic ?? [];
+    (m.getSource("nav-traffic") as { setData: (d: unknown) => void } | undefined)?.setData({
+      type: "FeatureCollection",
+      features: list.map((j) => ({ type: "Feature", properties: { level: j.level }, geometry: { type: "LineString", coordinates: j.coords } })),
+    });
+    if (box.current) box.current.dataset.jams = list.map((j) => j.level).join(",");
   }
 
   function drawNav() {
@@ -713,6 +730,8 @@ export function LiveMap({
   const roadsKey = roads.map((r) => `${r.id}${r.kind}`).join();
   useEffect(drawRoads, [roadsKey]);
   const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
+  const trafficKey = (nav?.traffic ?? []).map((j) => `${j.level}:${j.coords.length}:${j.coords[0]?.join()}`).join("|");
+  useEffect(drawTraffic, [trafficKey]);
   // (drawNav reads everything else from `latest`; it re-runs when the route, its mode or the destination change)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(drawNav, [navKey]);

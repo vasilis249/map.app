@@ -45,6 +45,18 @@ ok("hazards in two groups (on the road / weather)", await seen(gio.getByText("Σ
   && await gio.getByRole("button", { name: "Ομίχλη" }).isVisible());
 await gio.getByRole("button", { name: "Λακκούβα" }).click();
 ok("a pothole too (900 m further)", (await sqlUntil(`select count(*) from private.road_reports where kind = 'hazard' and sub = 'pothole'`, "1")) === "1");
+// standstill traffic 400 m before the pothole, and a closed road further on
+for (const [at, kind, sub] of [[1100, "Κίνηση", "Ακινησία"], [2300, "Κλειστός δρόμος", null]]) {
+  const p = along(MAIN, at, at + 20)[0];
+  await gioCtx.setGeolocation({ latitude: p[0], longitude: p[1], accuracy: 8 });
+  await gio.waitForTimeout(2500);
+  await gio.getByRole("button", { name: "Αναφορά" }).click();
+  await gio.getByRole("button", { name: kind }).click();
+  if (sub) await gio.getByRole("button", { name: sub }).click();
+  await gio.waitForTimeout(800);
+}
+ok("standstill traffic (one more tap) and a closed road (one tap: no details)",
+  (await sqlUntil(`select count(*) from private.road_reports where (kind = 'traffic' and sub = 'standstill') or (kind = 'closed' and sub is null)`, "2")) === "2");
 
 // 2. I navigate to Koukaki along that road
 const { page: me, ctx } = await open("me", "/map", { geo: SYNTAGMA });
@@ -55,6 +67,13 @@ await me.getByRole("button", { name: /^Κουκάκι Αθήνα/ }).click({ tim
 await me.getByRole("button", { name: "Έναρξη" }).click({ timeout: 10_000 });
 ok("navigating; the reports on the route are on my map", await seen(me.getByTestId("nav-banner"), 8_000)
   && await seen(me.locator('[data-road="police"]'), 15_000));
+ok("the closed road on my route: said, and a new route asked around it (closure sent to the provider)",
+  await me.waitForFunction(() => window.__spoken?.some((x) => x.text === "Κλειστός δρόμος στη διαδρομή. Βρίσκω άλλη."), null, { timeout: 15_000 }).then(() => true, () => false)
+  && (await (await fetch(`${SUPABASE}/routing/_log`)).json()).some((e) => e.path === "/route/v1" && e.body?.exclude_locations?.length === 1));
+ok("traffic ahead: the jam drawn on the route (standstill), its delay in the arrival time",
+  await me.waitForFunction(() => document.querySelector("[data-jams]")?.dataset.jams === "3", null, { timeout: 15_000 }).then(() => true, () => false)
+  && /^Κίνηση \+5 λ$/.test(await me.getByTestId("nav-delay").textContent({ timeout: 5_000 }).catch(() => "")));
+await me.screenshot({ path: `${S}/reports-2a-traffic.png` });
 let chip = "";
 for (const p of [[37.97535, 23.73425], ...along(MAIN, 0, 660, 14)]) {
   await ctx.setGeolocation({ latitude: p[0], longitude: p[1], accuracy: 8 });

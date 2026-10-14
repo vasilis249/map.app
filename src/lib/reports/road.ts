@@ -132,3 +132,69 @@ export function createReportAlerts() {
     },
   };
 }
+
+/** Traffic reports: how bad (1 moderate, 2 heavy / unspecified, 3 standstill) and what each adds to the trip. */
+export function trafficLevel(r: RoadReport): 0 | 1 | 2 | 3 {
+  if (r.kind !== "traffic") return 0;
+  return r.sub === "moderate" ? 1 : r.sub === "standstill" ? 3 : 2;
+}
+export const TRAFFIC_DELAY_S = [0, 60, 180, 300] as const;
+/** A jam is reported where someone sits in it: colour the road from a little before it to just after it. */
+const JAM_BEFORE_M = 250;
+const JAM_AFTER_M = 50;
+
+export interface Jam {
+  from: number;
+  to: number;
+  level: 1 | 2 | 3;
+}
+
+/**
+ * The stretches of your route ahead with traffic reported on them (merged where they overlap, the worse level wins),
+ * and the extra time they add to the arrival (each jam once, by its worst level).
+ */
+export function trafficAhead(ahead: Ahead[], along: number): { jams: Jam[]; delay_s: number } {
+  const raw = ahead
+    .filter((a) => a.onRoute && trafficLevel(a.report) > 0)
+    .map((a) => {
+      const at = along + a.distance;
+      return { from: Math.max(along, at - JAM_BEFORE_M), to: at + JAM_AFTER_M, level: trafficLevel(a.report) as 1 | 2 | 3 };
+    })
+    .sort((a, b) => a.from - b.from);
+  const jams: Jam[] = [];
+  for (const j of raw) {
+    const last = jams.at(-1);
+    if (last && j.from <= last.to) {
+      last.to = Math.max(last.to, j.to);
+      last.level = Math.max(last.level, j.level) as 1 | 2 | 3;
+    } else jams.push({ ...j });
+  }
+  return { jams, delay_s: jams.reduce((s, j) => s + TRAFFIC_DELAY_S[j.level], 0) };
+}
+
+/** The route's line between two distances along it ([lng, lat], for drawing a jam). */
+export function routeSlice(r: PreparedRoute, from: number, to: number): [number, number][] {
+  const out: [number, number][] = [];
+  const at = (d: number): [number, number] => {
+    let i = 1;
+    while (i < r.cum.length - 1 && r.cum[i] < d) i++;
+    const a = r.pts[i - 1], b = r.pts[i];
+    const seg = r.cum[i] - r.cum[i - 1] || 1;
+    const k = Math.min(1, Math.max(0, (d - r.cum[i - 1]) / seg));
+    return [a.lng + (b.lng - a.lng) * k, a.lat + (b.lat - a.lat) * k];
+  };
+  if (to <= from || from >= r.total) return out;
+  out.push(at(from));
+  for (let i = 0; i < r.pts.length; i++) if (r.cum[i] > from && r.cum[i] < to) out.push([r.pts[i].lng, r.pts[i].lat]);
+  out.push(at(Math.min(to, r.total)));
+  return out;
+}
+
+/** Closed roads to route around: the active "closed" reports, nearest to `me` first (at most 10). */
+export function closures(list: RoadReport[], me: LatLng | null): LatLng[] {
+  return list
+    .filter((r) => r.kind === "closed")
+    .sort((a, b) => (me ? haversine(me, a) - haversine(me, b) : 0))
+    .slice(0, 10)
+    .map((r) => ({ lat: r.lat, lng: r.lng }));
+}

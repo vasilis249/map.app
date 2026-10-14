@@ -34,11 +34,19 @@ async function call<T>(path: "route" | "search", body: unknown, signal?: AbortSi
   throw new NavApiError("unavailable");
 }
 
+/** Avoid toll roads / motorways (your choice, kept on the device) and closed roads reported on the route. */
+export interface RouteOptions {
+  avoidTolls?: boolean;
+  avoidHighways?: boolean;
+  avoid?: LatLng[];
+}
+
 export async function fetchRoutes(
   from: LatLng & { heading?: number | null },
   to: LatLng,
   lang: string,
   alternatives = true,
+  options: RouteOptions = {},
 ): Promise<NavRoute[]> {
   const heading = from.heading ?? undefined;
   const { routes } = await call<{ routes: NavRoute[] }>("route", {
@@ -46,6 +54,11 @@ export async function fetchRoutes(
     to: { lat: to.lat, lng: to.lng },
     lang: lang.startsWith("en") ? "en" : "el",
     alternatives,
+    options: {
+      avoidTolls: !!options.avoidTolls,
+      avoidHighways: !!options.avoidHighways,
+      avoid: (options.avoid ?? []).slice(0, 10).map((p) => ({ lat: +p.lat.toFixed(5), lng: +p.lng.toFixed(5) })),
+    },
   });
   return routes;
 }

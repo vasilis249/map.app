@@ -19,7 +19,8 @@ import {
 import { formatDistance } from "@/lib/location/format";
 import { arrivalTime, formatDuration } from "@/lib/nav/format";
 import type { ManeuverKind, NavManeuver } from "@/lib/nav/route";
-import { chooseRoute, setMuted, startNav, stopNav, type NavState, type NavTexts } from "@/lib/nav/session";
+import { useState } from "react";
+import { chooseRoute, readRoutePrefs, saveRoutePrefs, setMuted, startNav, stopNav, type NavState, type NavTexts, type RoutePrefs } from "@/lib/nav/session";
 import { cn } from "@/lib/utils";
 
 const ICONS: Record<ManeuverKind, LucideIcon> = {
@@ -107,11 +108,12 @@ export function NavBanner({ nav }: { nav: NavState }) {
 }
 
 /** Bottom of the screen while navigating: arrival time, time and distance left, voice on/off, end. */
-export function NavFooter({ nav }: { nav: NavState }) {
+export function NavFooter({ nav, delay_s = 0 }: { nav: NavState; delay_s?: number }) {
   const { t, i18n } = useTranslation();
   const r = nav.route;
   if (!r) return null;
-  const eta = nav.progress?.eta_s ?? r.route.time_s;
+  // + the time the traffic reported ahead adds (the provider's times know nothing about it)
+  const eta = (nav.progress?.eta_s ?? r.route.time_s) + delay_s;
   const left = nav.progress?.remaining ?? r.total;
   return (
     <div className="flex items-center gap-3 rounded-3xl glass border border-border/60 p-3 shadow-float">
@@ -121,6 +123,11 @@ export function NavFooter({ nav }: { nav: NavState }) {
         </p>
         <p className="text-caption text-muted-foreground tabular-nums">
           {formatDuration(eta, t)} · {formatDistance(left, i18n.language)}
+          {delay_s > 0 && (
+            <span className="block font-semibold text-[#ff3b30]" data-testid="nav-delay">
+              {t("nav.trafficDelay", { time: formatDuration(delay_s, t) })}
+            </span>
+          )}
         </p>
       </div>
       <button
@@ -140,11 +147,31 @@ export function NavFooter({ nav }: { nav: NavState }) {
 }
 
 /** Route choices for a destination: time, distance, main road; the fastest first. Start / cancel. */
-export function RoutePreview({ nav, texts }: { nav: NavState; texts: NavTexts }) {
+export function RoutePreview({ nav, texts, onReplan }: { nav: NavState; texts: NavTexts; onReplan: () => void }) {
   const { t, i18n } = useTranslation();
+  const [prefs, setPrefs] = useState(readRoutePrefs);
+  const toggle = (k: keyof RoutePrefs) => {
+    const next = { ...prefs, [k]: !prefs[k] };
+    setPrefs(next);
+    saveRoutePrefs(next);
+    onReplan();
+  };
   return (
     <div className="rounded-3xl glass border border-border/60 p-4 shadow-float" data-testid="route-preview">
       <p className="truncate text-callout font-semibold">{t("nav.routes", { place: nav.dest?.name ?? "" })}</p>
+      <div className="mt-2 flex gap-2">
+        {(["avoidTolls", "avoidHighways"] as const).map((k) => (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={prefs[k]}
+            onClick={() => toggle(k)}
+            className={cn("h-8 rounded-full px-3 text-caption font-semibold", prefs[k] ? "bg-link text-white" : "glass-tile")}
+          >
+            {t(`nav.${k}`)}
+          </button>
+        ))}
+      </div>
       {nav.phase === "loading" && (
         <p className="mt-3 flex items-center gap-2 text-caption text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> {t("nav.loading")}

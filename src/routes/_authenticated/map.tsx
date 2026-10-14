@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { LocateFixed, MapPin, MoreHorizontal, Navigation, RadioTower, Search, Users } from "lucide-react";
@@ -13,13 +13,13 @@ import { spokenDistance } from "@/lib/nav/format";
 import { spokenMetres } from "@/lib/nav/guidance";
 import { RoadAheadChip, RoadAskCard, RoadDetailSheet, roadLabel, RoadReportButton, RoadReportSheet } from "@/components/road/road-ui";
 import { createRoadReport, RoadApiError, reportRoadAbuse, voteRoadReport, withdrawRoadReport } from "@/lib/reports/api";
-import { createReportAlerts, relevant, type RoadKind, type RoadReport } from "@/lib/reports/road";
+import { closures, createReportAlerts, relevant, routeSlice, trafficAhead, type RoadKind, type RoadReport } from "@/lib/reports/road";
 import { limitAt } from "@/lib/nav/route";
 import { createSpeedWatch } from "@/lib/nav/speed-limit";
 import { useRoadReports } from "@/lib/reports/use-road";
 import { toast } from "sonner";
 import type { Place } from "@/lib/nav/route";
-import { announce, chooseRoute, planTo, useNav, type NavTexts } from "@/lib/nav/session";
+import { announce, chooseRoute, planTo, rerouteNow, setAvoid, useNav, type NavTexts } from "@/lib/nav/session";
 import { FollowButton } from "@/components/friends/follow-button";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { useHubPeers } from "@/components/walkie/walkie-hub";
@@ -196,6 +196,31 @@ function MapPage() {
     announce(`road:${e.report.id}`, t("road.sayAhead", { kind, distance: spokenDistance(spokenMetres(e.distance), t, i18n.language) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progressAlong, navActive]);
+  // Traffic reported on the route ahead: coloured on the line, its delay added to the arrival time (Waze).
+  const traffic = navActive && nav.route && nav.progress ? trafficAhead(roadAhead, nav.progress.along) : { jams: [], delay_s: 0 };
+  const jamsKey = traffic.jams.map((j) => `${j.level}:${Math.round(j.from / 20)}:${Math.round(j.to / 20)}`).join("|");
+  const navRoute = nav.route;
+  const jamLines = useMemo(
+    () => (navRoute ? traffic.jams.map((j) => ({ level: j.level, coords: routeSlice(navRoute, j.from, j.to) })) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [jamsKey, navRoute],
+  );
+  // Closed roads: routes go around them; one reported on your route ahead while navigating → a new route at once.
+  const closedKey = roadList.filter((r) => r.kind === "closed").map((r) => r.id).join();
+  useEffect(() => {
+    setAvoid(closures(roadList, me));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closedKey]);
+  const closedHandled = useRef(new Set<string>());
+  useEffect(() => {
+    if (!navActive) return void closedHandled.current.clear();
+    const c = roadAhead.find((a) => a.onRoute && a.report.kind === "closed" && a.distance > 60 && !closedHandled.current.has(a.report.id));
+    if (!c) return;
+    closedHandled.current.add(c.report.id);
+    announce(`closed:${c.report.id}`, t("nav.closedAhead"));
+    rerouteNow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progressAlong, navActive, closedKey]);
   // Speed limit where the map knows it; over it: the speedometer turns red and the limit is said once.
   const limit = navActive && nav.route && nav.progress ? limitAt(nav.route.route, nav.progress.along) : null;
   const speedWatch = useRef(createSpeedWatch());
@@ -285,7 +310,7 @@ function MapPage() {
         onSelectRoad={setRoadOpen}
         nav={
           navActive && nav.route && nav.dest
-            ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion }
+            ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion, traffic: jamLines }
             : planning && nav.dest
               ? { lines: nav.routes.map((r) => r.points), chosen: nav.chosen, dest: nav.dest, mode: "preview", bearing: null, onChoose: chooseRoute }
               : null
@@ -384,8 +409,8 @@ function MapPage() {
 
         {navActive && roadAsk && <RoadAskCard report={roadAsk} onVote={(v) => voteRoad(roadAsk, v)} onDismiss={() => setRoadAsk(null)} />}
 
-        {navActive && <NavFooter nav={nav} />}
-        {planning && <RoutePreview nav={nav} texts={navTexts} />}
+        {navActive && <NavFooter nav={nav} delay_s={traffic.delay_s} />}
+        {planning && <RoutePreview nav={nav} texts={navTexts} onReplan={() => nav.dest && planFrom(nav.dest)} />}
 
         {on && view === "friends" && plain && (
           <div className="max-w-full self-start rounded-3xl glass border border-border/60 shadow-float p-3">

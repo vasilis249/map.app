@@ -1,11 +1,12 @@
 // Server-only: the app's navigation endpoints on the Worker (src/server.ts routes /api/nav/* here).
-//   POST /api/nav/route   { from: {lat, lng, heading?}, to: {lat, lng}, alternatives?, lang? } → { routes: NavRoute[] }
+//   POST /api/nav/route   { from: {lat, lng, heading?}, to: {lat, lng}, alternatives?, lang?,
+//                           options?: { avoidTolls?, avoidHighways?, avoid?: [{lat, lng}] ≤ 10 } } → { routes: NavRoute[] }
 //   POST /api/nav/search  { q, near?: {lat, lng}, lang? } → { places: Place[] }
 // POST (not GET) keeps the trip's coordinates and the search text out of URLs and access logs. Every call needs the
 // caller's Supabase session (Authorization: Bearer <access token>): the database checks it and the per-user limits
 // (public.nav_quota) before the provider is called. Answers are cached at the edge (no user in the key).
 import { haversine, type LatLng } from "./geo";
-import { providerRoute, providerSearch, ProviderError } from "./provider.server";
+import { providerRoute, providerSearch, ProviderError, type RouteOptions } from "./provider.server";
 
 type Json = Record<string, unknown>;
 const json = (status: number, body: unknown, extra: Record<string, string> = {}) =>
@@ -13,6 +14,8 @@ const json = (status: number, body: unknown, extra: Record<string, string> = {})
 const fail = (status: number, error: string) => json(status, { error });
 
 const MAX_BODY = 4_096;
+/** Closed roads to route around, at most. */
+const MAX_AVOID = 10;
 /** The longest trip we route (a straight line; Greece end to end is ≈ 1 000 km). */
 const MAX_TRIP_M = 1_500_000;
 const ROUTE_TTL_S = 300;
@@ -28,6 +31,17 @@ function point(v: unknown): LatLng | null {
   return { lat, lng };
 }
 const lang = (v: unknown) => (v === "en" ? "en" : "el");
+
+/** Route options from the request (anything malformed → null: bad input). */
+function routeOptions(v: unknown): RouteOptions | null {
+  if (v == null) return { avoidTolls: false, avoidHighways: false, avoid: [] };
+  if (typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as Json;
+  if (o.avoid != null && (!Array.isArray(o.avoid) || o.avoid.length > MAX_AVOID)) return null;
+  const avoid = ((o.avoid as unknown[] | undefined) ?? []).map(point);
+  if (avoid.some((p) => !p)) return null;
+  return { avoidTolls: o.avoidTolls === true, avoidHighways: o.avoidHighways === true, avoid: avoid as LatLng[] };
+}
 
 /** Ask the database: is this a signed-in, allowed person within their limits? */
 async function quota(token: string, kind: "route" | "search"): Promise<Response | null> {
@@ -107,14 +121,16 @@ export async function handleNav(request: Request): Promise<Response> {
     const heading = typeof h === "number" && Number.isFinite(h) && h >= 0 && h <= 360 ? h : undefined;
     if (haversine(from, to) > MAX_TRIP_M) return fail(422, "too_far");
     const alternatives = body.alternatives !== false;
+    const options = routeOptions(body.options);
+    if (!options) return fail(400, "bad_input");
     const l = lang(body.lang);
     const denied = await quota(token, "route");
     if (denied) return denied;
     // ≈ 10 m grid for the start, 1 m for the destination; heading in 30° steps.
-    const key = `route/${l}/${from.lat.toFixed(4)},${from.lng.toFixed(4)}/${heading == null ? "-" : Math.round(heading / 30) % 12}/${to.lat.toFixed(5)},${to.lng.toFixed(5)}/${alternatives ? 1 : 0}`;
+    const key = `route/${l}/${from.lat.toFixed(4)},${from.lng.toFixed(4)}/${heading == null ? "-" : Math.round(heading / 30) % 12}/${to.lat.toFixed(5)},${to.lng.toFixed(5)}/${alternatives ? 1 : 0}/${options.avoidTolls ? 1 : 0}${options.avoidHighways ? 1 : 0}/${options.avoid.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).join(";")}`;
     try {
       return await cached(key, ROUTE_TTL_S, async () => ({
-        routes: await providerRoute({ ...from, heading: heading == null ? undefined : Math.round(heading / 30) * 30 }, to, l, alternatives),
+        routes: await providerRoute({ ...from, heading: heading == null ? undefined : Math.round(heading / 30) * 30 }, to, l, alternatives, options),
       }));
     } catch (e) {
       return providerFailure(e);

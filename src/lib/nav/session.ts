@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { walkieHub } from "@/lib/walkie/hub";
-import { fetchRoutes, NavApiError, type NavError } from "./api";
+import { fetchRoutes, NavApiError, type NavError, type RouteOptions } from "./api";
 import type { LatLng } from "./geo";
 import { bearing as bearingOf, haversine } from "./geo";
 import { createMotion, type Motion } from "./motion";
@@ -55,6 +55,39 @@ const readMuted = () => {
   }
 };
 
+/** Route preferences (Waze's "avoid tolls / motorways"), remembered on the device. */
+export interface RoutePrefs {
+  avoidTolls: boolean;
+  avoidHighways: boolean;
+}
+const PREFS_KEY = "mapapp:routePrefs";
+export function readRoutePrefs(): RoutePrefs {
+  try {
+    const v = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}") as Partial<RoutePrefs>;
+    return { avoidTolls: v.avoidTolls === true, avoidHighways: v.avoidHighways === true };
+  } catch {
+    return { avoidTolls: false, avoidHighways: false };
+  }
+}
+export function saveRoutePrefs(p: RoutePrefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    // private mode: for now only
+  }
+}
+/** Closed roads to route around (the map screen keeps this up to date from the road reports). */
+let avoidPoints: LatLng[] = [];
+export function setAvoid(points: LatLng[]) {
+  avoidPoints = points.slice(0, 10);
+}
+const routeOptions = (): RouteOptions => ({ ...readRoutePrefs(), avoid: avoidPoints });
+/** While navigating: get a new route now (a closed road ahead). */
+let forceReroute: (() => boolean) | null = null;
+export function rerouteNow(): boolean {
+  return forceReroute?.() ?? false;
+}
+
 const IDLE: NavState = { phase: "idle", dest: null, routes: [], chosen: 0, error: null, route: null, progress: null, rerouting: false, muted: false, fix: null, motion: null, speedKmh: null };
 let state: NavState = IDLE;
 const listeners = new Set<() => void>();
@@ -93,7 +126,7 @@ export async function planTo(dest: Place, from: LatLng, lang: string) {
   const seq = ++planSeq;
   set({ phase: "loading", dest, routes: [], chosen: 0, error: null });
   try {
-    const routes = await fetchRoutes(from, dest, lang);
+    const routes = await fetchRoutes(from, dest, lang, true, routeOptions());
     if (seq === planSeq) set({ phase: "preview", routes });
   } catch (e) {
     if (seq === planSeq) set({ phase: "preview", routes: [], error: e instanceof NavApiError ? e.code : "unavailable" });
@@ -125,6 +158,26 @@ export function startNav(texts: NavTexts, lang: string) {
   };
   let arrivedTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const reroute = (fix: NavFix) => {
+    set({ rerouting: true });
+    fetchRoutes({ lat: fix.lat, lng: fix.lng, heading: fix.course }, dest, lang, false, routeOptions())
+      .then((r) => {
+        if (ended) return;
+        nav.rerouted(r[0] ?? null);
+        if (r[0]) generation++;
+        set({ route: nav.route, rerouting: false });
+      })
+      .catch(() => {
+        nav.rerouted(null);
+        if (!ended) set({ rerouting: false });
+      });
+  };
+  forceReroute = () => {
+    if (ended || !prev || !nav.requestReroute(Date.now())) return false;
+    reroute(prev);
+    return true;
+  };
+
   const motion = createMotion();
   let prev: NavFix | null = null;
   const onFix = (raw: NavFix) => {
@@ -142,20 +195,7 @@ export function startNav(texts: NavTexts, lang: string) {
       const ahead = Number.isNaN(k) || u.say.key.endsWith(":post") ? () => true : () => (state.progress?.step ?? 0) < k || !!state.progress?.arrived;
       voice.say({ ...u.say, still: () => gen === generation && ahead() });
     }
-    if (u.reroute) {
-      set({ rerouting: true });
-      fetchRoutes({ lat: fix.lat, lng: fix.lng, heading: fix.course }, dest, lang, false)
-        .then((r) => {
-          if (ended) return;
-          nav.rerouted(r[0] ?? null);
-          if (r[0]) generation++;
-          set({ route: nav.route, rerouting: false });
-        })
-        .catch(() => {
-          nav.rerouted(null);
-          if (!ended) set({ rerouting: false });
-        });
-    }
+    if (u.reroute) reroute(fix);
     motion.update({
       route: nav.route,
       along: p.along,
@@ -190,6 +230,7 @@ export function startNav(texts: NavTexts, lang: string) {
     if (arrivedTimer) clearTimeout(arrivedTimer);
     silence = null;
     extra = null;
+    forceReroute = null;
   };
   set({ phase: "navigating", route: nav.route, progress: null, rerouting: false, error: null, muted: readMuted(), fix: null, motion, speedKmh: null });
 }
