@@ -17,9 +17,13 @@ import { closures, createReportAlerts, relevant, routeSlice, trafficAhead, type 
 import { limitAt } from "@/lib/nav/route";
 import { createSpeedWatch } from "@/lib/nav/speed-limit";
 import { useRoadReports } from "@/lib/reports/use-road";
+import { DestParkingChip, ParkingAskCard, ParkingDetailSheet, ParkingSheet } from "@/components/parking/parking-ui";
+import { leaveSpot, markTaken, ParkingApiError, parkHere, useParking } from "@/lib/parking/api";
+import { carStale, droveOff, freeNear, readCar, saveCar, type ParkingSpot } from "@/lib/parking/parking";
+import { haversine } from "@/lib/nav/geo";
 import { toast } from "sonner";
 import type { Place } from "@/lib/nav/route";
-import { announce, chooseRoute, planTo, rerouteNow, setAvoid, useNav, type NavTexts } from "@/lib/nav/session";
+import { announce, chooseRoute, planTo, rerouteNow, setAvoid, stopNav, useNav, type NavTexts } from "@/lib/nav/session";
 import { FollowButton } from "@/components/friends/follow-button";
 import { PersonActionsSheet } from "@/components/friends/person-actions-sheet";
 import { useHubPeers } from "@/components/walkie/walkie-hub";
@@ -262,6 +266,72 @@ function MapPage() {
     if (me) void planTo(dest, me, i18n.language);
   };
 
+  // Parking (P7): green spots just freed, red ones just taken; around you and around where you're heading.
+  const parking = useParking(me, navActive || planning ? (nav.dest ?? null) : null);
+  const spots = parking.data ?? [];
+  const [parkingOpen, setParkingOpen] = useState(false);
+  const [spotOpen, setSpotOpen] = useState<string | null>(null);
+  const [askParked, setAskParked] = useState(false);
+  const [askFreed, setAskFreed] = useState(false);
+  const parkingError = (e: unknown) =>
+    toast(t(e instanceof ParkingApiError && e.code !== "generic" ? `parking.errors.${e.code}` : "errors.generic"));
+  const refreshParking = () => void qc.invalidateQueries({ queryKey: ["parking"] });
+  /** Leaving: the spot is where your car was (if you marked it and are still close), else where you are. */
+  const leave = () => {
+    setParkingOpen(false);
+    setAskFreed(false);
+    const car = readCar();
+    const at = car && !carStale(car, Date.now()) && me && haversine(car, me) <= 150 ? car : me;
+    if (!at) return void toast(t("road.errors.no_position"));
+    saveCar(null);
+    leaveSpot(at)
+      .then(() => {
+        toast(t("parking.leftThanks"));
+        refreshParking();
+      })
+      .catch(parkingError);
+  };
+  const park = () => {
+    setParkingOpen(false);
+    setAskParked(false);
+    if (!me) return void toast(t("road.errors.no_position"));
+    saveCar({ lat: me.lat, lng: me.lng, at: Date.now() });
+    parkHere(me)
+      .then(() => {
+        toast(t("parking.parkedThanks"));
+        refreshParking();
+      })
+      .catch(parkingError);
+  };
+  // Arrived: "Did you park?"
+  useEffect(() => {
+    if (nav.phase === "arrived") setAskParked(true);
+  }, [nav.phase]);
+  // Driving off from where you parked: "Did you free your spot?" (once; either answer forgets the car)
+  const anyFix = nav.fix ?? local.fix;
+  const lastFix = useRef<{ lat: number; lng: number; t: number } | null>(null);
+  useEffect(() => {
+    if (!anyFix) return;
+    const now = Date.now();
+    // (the device's speed; else from the previous fix — browsers give none)
+    const prev = lastFix.current;
+    const dt = prev ? (now - prev.t) / 1000 : 0;
+    const speed = anyFix.speed ?? (prev && dt >= 0.5 && dt <= 10 ? haversine(prev, anyFix) / dt : null);
+    lastFix.current = { lat: anyFix.lat, lng: anyFix.lng, t: now };
+    if (!askFreed && droveOff(readCar(), { lat: anyFix.lat, lng: anyFix.lng, speed }, now)) setAskFreed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anyFix?.lat, anyFix?.lng, anyFix?.speed]);
+  // Close to the destination: the nearest free spot near it.
+  const destSpot =
+    navActive && nav.dest && nav.progress && nav.progress.remaining < 1_500 && !nav.dest.id.startsWith("parking:")
+      ? freeNear(spots, nav.dest)[0]
+      : undefined;
+  const goToSpot = (s: ParkingSpot) => {
+    setSpotOpen(null);
+    if (navActive) stopNav();
+    planFrom({ id: `parking:${s.id}`, name: t("parking.free"), detail: "", lat: s.lat, lng: s.lng });
+  };
+
   const select = (p: MapPerson | null) => {
     void navigate({ search: p ? { u: p.user_id } : {}, replace: true });
     if (p && (p.lat || p.lng)) move({ lat: p.lat, lng: p.lng });
@@ -308,6 +378,9 @@ function MapPage() {
         roads={roadList}
         roadLabel={(k) => t(`road.kinds.${k}`)}
         onSelectRoad={setRoadOpen}
+        parking={spots}
+        parkingLabel={(st) => t(`parking.label_${st}`)}
+        onSelectParking={setSpotOpen}
         nav={
           navActive && nav.route && nav.dest
             ? { lines: [aheadOfYou], chosen: 0, dest: nav.dest, mode: "follow", bearing: nav.fix?.course ?? nav.progress?.routeBearing ?? null, motion: nav.motion, traffic: jamLines }
@@ -408,6 +481,23 @@ function MapPage() {
         </div>
 
         {navActive && roadAsk && <RoadAskCard report={roadAsk} onVote={(v) => voteRoad(roadAsk, v)} onDismiss={() => setRoadAsk(null)} />}
+        {destSpot && !askParked && <DestParkingChip distance={destSpot.distance} onGo={() => goToSpot(destSpot.spot)} />}
+        {askParked && (
+          <ParkingAskCard state="taken" testId="ask-parked" question={t("parking.askParked")} yes={t("parking.yesParked")} onYes={park} onNo={() => setAskParked(false)} />
+        )}
+        {askFreed && !askParked && (
+          <ParkingAskCard
+            state="free"
+            testId="ask-freed"
+            question={t("parking.askFreed")}
+            yes={t("parking.yesFreed")}
+            onYes={leave}
+            onNo={() => {
+              setAskFreed(false);
+              saveCar(null);
+            }}
+          />
+        )}
 
         {navActive && <NavFooter nav={nav} delay_s={traffic.delay_s} />}
         {planning && <RoutePreview nav={nav} texts={navTexts} onReplan={() => nav.dest && planFrom(nav.dest)} />}
@@ -625,7 +715,30 @@ function MapPage() {
         </DrawerContent>
       </Drawer>
 
-      <RoadReportSheet open={reporting} onOpenChange={setReporting} onPick={reportRoad} />
+      <RoadReportSheet
+        open={reporting}
+        onOpenChange={setReporting}
+        onPick={reportRoad}
+        onParking={() => {
+          setReporting(false);
+          setParkingOpen(true);
+        }}
+      />
+      <ParkingSheet open={parkingOpen} onOpenChange={setParkingOpen} onLeave={leave} onPark={park} />
+      <ParkingDetailSheet
+        spot={spots.find((x) => x.id === spotOpen) ?? null}
+        onClose={() => setSpotOpen(null)}
+        onGo={goToSpot}
+        onTaken={(x) => {
+          setSpotOpen(null);
+          markTaken(x.id)
+            .then(() => {
+              toast(t("parking.takenThanks"));
+              refreshParking();
+            })
+            .catch(parkingError);
+        }}
+      />
       <RoadDetailSheet
         report={roadList.find((r) => r.id === roadOpen) ?? null}
         onClose={() => setRoadOpen(null)}

@@ -276,6 +276,10 @@ export type Database = {
       nearby_audio: { Args: { p_id: string }; Returns: { mime: string; audio_b64: string }[] };
       nearby_history: { Args: { p_other: string; p_limit?: number }; Returns: { id: string; sender_id: string; duration_ms: number; created_at: string }[] };
       nearby_knock: { Args: { p_to: string }; Returns: undefined };
+      parking_in: { Args: { p_min_lat: number; p_min_lng: number; p_max_lat: number; p_max_lng: number }; Returns: { id: string; state: string; lat: number; lng: number; updated_at: string; expires_at: string; mine: boolean }[] };
+      parking_leave: { Args: { p_lat: number; p_lng: number }; Returns: string };
+      parking_park: { Args: { p_lat: number; p_lng: number }; Returns: string };
+      parking_taken: { Args: { p_id: string }; Returns: undefined };
       profile_stats: { Args: { p_user: string }; Returns: { followers: number; following: number; i_follow: boolean; follows_me: boolean }[] };
       remove_follower: { Args: { p_user: string }; Returns: undefined };
       report_content: { Args: { p_kind: string; p_target: string; p_reason?: string }; Returns: undefined };

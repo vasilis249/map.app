@@ -6,6 +6,7 @@ import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/compone
 import { formatDistance } from "@/lib/location/format";
 import { ROAD_KINDS, ROAD_SUBS, type RoadKind, type RoadReport } from "@/lib/reports/road";
 import { timeAgoShort } from "@/lib/time-ago";
+import { ParkingBadge } from "@/components/parking/parking-ui";
 
 export const ROAD_ICON: Record<RoadKind, LucideIcon> = {
   accident: CarFront,
@@ -64,10 +65,13 @@ export function RoadReportSheet({
   open,
   onOpenChange,
   onPick,
+  onParking,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onPick: (k: RoadKind, sub: string | null) => void;
+  /** The eighth tile: parking (free / taken spots). */
+  onParking: () => void;
 }) {
   const { t } = useTranslation();
   const [kind, setKind] = useState<RoadKind | null>(null);
@@ -95,6 +99,14 @@ export function RoadReportSheet({
                     {t(`road.kinds.${k}`)}
                   </button>
                 ))}
+                <button
+                  type="button"
+                  onClick={onParking}
+                  className="glass-tile flex h-28 flex-col items-center justify-center gap-2 rounded-3xl text-body font-semibold active:scale-[0.98]"
+                >
+                  <ParkingBadge state="free" size={52} />
+                  {t("parking.tile")}
+                </button>
               </div>
             </>
           ) : (

@@ -109,6 +109,29 @@ const ROAD_COLORS: Record<MapRoad["kind"], string> = {
   help: "#30b0c7",
 };
 
+/** A parking spot (P7): green = just freed, red = taken. */
+export interface MapParking {
+  id: string;
+  state: "free" | "taken";
+  lat: number;
+  lng: number;
+}
+
+function parkingElement(p: MapParking, label: string, onSelect: (id: string) => void): HTMLElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.setAttribute("aria-label", label);
+  btn.dataset.parking = p.state;
+  btn.className = "grid h-8 w-8 place-items-center rounded-lg border-2 border-white text-[15px] font-extrabold text-white shadow-float";
+  btn.style.background = p.state === "free" ? "#30d158" : "#ff3b30";
+  btn.textContent = "P";
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onSelect(p.id);
+  });
+  return btn;
+}
+
 function roadElement(r: MapRoad, label: string, onSelect: (id: string) => void): HTMLElement {
   const btn = document.createElement("button");
   btn.type = "button";
@@ -265,6 +288,9 @@ export function LiveMap({
   roads = [],
   roadLabel = (k) => k,
   onSelectRoad = () => {},
+  parking = [],
+  parkingLabel = (s) => s,
+  onSelectParking = () => {},
 }: {
   me: LivePosition | null;
   meFace: { name: string; path: string | null };
@@ -287,6 +313,10 @@ export function LiveMap({
   roads?: MapRoad[];
   roadLabel?: (kind: MapRoad["kind"]) => string;
   onSelectRoad?: (id: string) => void;
+  /** Parking spots (green free / red taken); tapping one calls onSelectParking. */
+  parking?: MapParking[];
+  parkingLabel?: (state: MapParking["state"]) => string;
+  onSelectParking?: (id: string) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const map = useRef<MlMap | null>(null);
@@ -299,8 +329,9 @@ export function LiveMap({
   const placed = useRef<"none" | "stored" | "live">("none");
   const userMoved = useRef(false);
   const schemeOff = useRef<(() => void) | null>(null);
-  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad });
-  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad };
+  const latest = useRef({ me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad, parking, parkingLabel, onSelectParking });
+  latest.current = { me, meFace, radius, people, onSelect, talking, ageOf, lang, nav, roads, roadLabel, onSelectRoad, parking, parkingLabel, onSelectParking };
+  const parkingMarkers = useRef(new Map<string, { marker: Marker; sig: string }>());
   const roadMarkers = useRef(new Map<string, { marker: Marker; sig: string }>());
   const destMarker = useRef<Marker | null>(null);
   // Follow mode paused because you moved the map yourself (the recenter button resumes it).
@@ -315,6 +346,7 @@ export function LiveMap({
     let cancelled = false;
     const all = markers.current;
     const roadPins = roadMarkers.current;
+    const parkPins = parkingMarkers.current;
     void Promise.all([import("maplibre-gl"), mapStyle()]).then(([ml, style]) => {
       if (cancelled || !box.current) return;
       if (ml.getWorkerUrl() !== maplibreWorkerUrl) ml.setWorkerUrl(maplibreWorkerUrl);
@@ -410,6 +442,8 @@ export function LiveMap({
       all.clear();
       roadPins.forEach(({ marker }) => marker.remove());
       roadPins.clear();
+      parkPins.forEach(({ marker }) => marker.remove());
+      parkPins.clear();
       if (loop.current != null) cancelAnimationFrame(loop.current);
       loop.current = null;
       meMarker.current = null;
@@ -693,8 +727,32 @@ export function LiveMap({
       }
     }
     drawRoads();
+    drawParking();
     drawAreas();
     navCamera();
+  }
+
+  /** Parking pins (plain DOM markers). */
+  function drawParking() {
+    const m = map.current;
+    const ml = lib.current;
+    if (!m || !ml) return;
+    const { parking: list, parkingLabel: label } = latest.current;
+    const seen = new Set<string>();
+    for (const p of list) {
+      seen.add(p.id);
+      const sig = `${p.state}|${p.lat}|${p.lng}`;
+      const cur = parkingMarkers.current.get(p.id);
+      if (cur?.sig === sig) continue;
+      cur?.marker.remove();
+      const marker = new ml.Marker({ element: parkingElement(p, label(p.state), (id) => latest.current.onSelectParking(id)) }).setLngLat([p.lng, p.lat]).addTo(m);
+      parkingMarkers.current.set(p.id, { marker, sig });
+    }
+    for (const [id, { marker }] of parkingMarkers.current)
+      if (!seen.has(id)) {
+        marker.remove();
+        parkingMarkers.current.delete(id);
+      }
   }
 
   /** Road report pins (plain DOM markers, like the people). */
@@ -729,6 +787,8 @@ export function LiveMap({
   useEffect(sync, [me?.lat, me?.lng, me?.accuracy, me?.live, meFace.name, meFace.path, people, radius, talkingKey]);
   const roadsKey = roads.map((r) => `${r.id}${r.kind}`).join();
   useEffect(drawRoads, [roadsKey]);
+  const parkingKey = parking.map((p) => `${p.id}${p.state}${p.lat}`).join();
+  useEffect(drawParking, [parkingKey]);
   const navKey = nav ? `${nav.mode}|${nav.chosen}|${nav.lines.length}|${nav.lines[nav.chosen]?.length}|${nav.lines[nav.chosen]?.[0]?.join()}|${nav.dest.lat},${nav.dest.lng}` : "";
   const trafficKey = (nav?.traffic ?? []).map((j) => `${j.level}:${j.coords.length}:${j.coords[0]?.join()}`).join("|");
   useEffect(drawTraffic, [trafficKey]);

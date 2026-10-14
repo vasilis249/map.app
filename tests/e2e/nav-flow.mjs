@@ -199,6 +199,11 @@ await goTo(REROUTE.at(-1));
 ok("arrived: banner 'Έφτασες' + the destination", await seen(me.getByTestId("nav-banner").or(me.getByRole("status")).filter({ hasText: "Έφτασες" }), 8_000));
 ok("… and the voice says so", (await spoken()).includes("Ο προορισμός σας βρίσκεται δεξιά."));
 await me.screenshot({ path: `${S}/nav-6-arrived.png` });
+ok("arrived: 'Πάρκαρες;' (parking)", await seen(me.getByTestId("ask-parked"), 5_000));
+await me.getByTestId("ask-parked").getByRole("button", { name: "Ναι, πάρκαρα" }).click();
+ok("… yes: a red spot where I parked, my car's place on the phone",
+  (await sqlUntil(`select count(*) from private.parking_spots where created_by = '${ME}' and state = 'taken'`, "1")) === "1"
+  && (await me.evaluate(() => !!localStorage.getItem("mapapp:myCar"))));
 await me.getByRole("button", { name: "Τέλος" }).click();
 await me.waitForTimeout(1500);
 ok("end: back to the map (search shown)", await seen(me.getByRole("button", { name: "Πού πας;" })));
