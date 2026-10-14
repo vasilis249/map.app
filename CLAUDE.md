@@ -104,7 +104,8 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - D10 (P1) Ghost mode = sharing `off` with one tap on the map (server deletes the position at once); the previous
   mode is remembered on the device so one more tap restores it (`src/components/location/ghost-button.tsx`).
 - D11 Until the first deploy to a real Supabase project the baseline migration is amended in place; after it, only
-  new migrations.
+  new migrations. **The baseline is live since 2026-10-14 (project `pdajcrlxeqggeucfqmpg`): schema changes are now NEW
+  migration files only.** Web app: https://map-app.vasilis-har.workers.dev (Worker `map-app`).
 - D12 (P2) Moderation: admins (`private.admins`, granted by SQL) work a queue (`admin_reports`), can hear a reported
   transmission while it is kept (24 h), dismiss, or disable an account (closes all its open reports; position and
   open channels to them deleted). Every decision records resolved_by / resolved_at / resolution. A disabled account

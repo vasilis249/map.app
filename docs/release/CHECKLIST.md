@@ -8,10 +8,11 @@ Tick each line; anything not done is a reason not to ship. Owner = you (decision
 - [ ] Legal entity, address, contact email, courts city → `src/lib/brand.ts` (`LEGAL`).
 - [ ] A lawyer reviews `src/legal/content.ts` (privacy policy + terms, el / en drafts).
 - [ ] Apple Developer Program (team), App Store Connect app, agreements / tax / banking (if paid).
-- [ ] Supabase project (EU region), Cloudflare account, Stadia Maps (Starter plan: commercial use).
+- [x] Supabase project (`pdajcrlxeqggeucfqmpg`), Cloudflare account (workers.dev subdomain `vasilis-har`).
+- [ ] Stadia Maps (Starter plan: commercial use).
 
 ## 2. Backend (dev, with the owner's accounts)
-- [ ] Supabase: run `supabase/migrations/20261011100000_baseline.sql` (from now on only NEW migrations — D11 ends).
+- [x] Supabase: run `supabase/migrations/20261011100000_baseline.sql` (from now on only NEW migrations — D11 ends).
 - [ ] Extensions: `pg_cron` on **before** the migration (else re-run its last `DO $cron$` block): jobs expire-locations,
       expire-nearby, expire-walkie, expire-misc, expire-road.
 - [ ] Realtime → "Allow public access" **off** (private channels only).
@@ -22,9 +23,11 @@ Tick each line; anything not done is a reason not to ship. Owner = you (decision
 - [ ] Demo accounts for App Review (2, 18+, following each other).
 
 ## 3. Web app on Cloudflare (dev)
-- [ ] `.env` (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) — publishable key only.
-- [ ] Worker secrets: `wrangler secret put SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `ROUTING_API_KEY`.
-- [ ] `npm run deploy` passes the bundle guard; `/privacy` and `/terms` load without an account.
+- [x] `.env` (VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY) — publishable key only.
+- [x] Worker secrets: `wrangler secret put SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`.
+- [ ] Worker secret `ROUTING_API_KEY` (Stadia; navigation answers "unavailable" until then).
+- [x] `npm run deploy` passes the bundle guard; `/privacy` and `/terms` load without an account
+      (https://map-app.vasilis-har.workers.dev, first deploy 2026-10-14).
 - [ ] A custom domain (privacy policy / support URLs on your domain).
 
 ## 4. iOS build (owner's Mac + dev)

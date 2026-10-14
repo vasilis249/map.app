@@ -4,6 +4,8 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "workers_dev": true,
+  "preview_urls": false,
   "observability": { "enabled": true }
   // Secrets / vars (set with `wrangler secret put` or the dashboard, never in this file):
   //   SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY (the Worker checks sessions / limits with them),
