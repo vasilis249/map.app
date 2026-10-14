@@ -345,3 +345,20 @@ written by `realtime.send` from `nearby_knock`), authorized by policies on `real
 - Not verified: Xcode build with the privacy manifest + new icon / splash on a device, App Store Connect, the legal
   texts (drafts — lawyer + entity), battery on a real phone, Supabase's own behaviour for deleting an auth user from
   SQL on the hosted project (works on the local stub; the hosted project must be checked once).
+
+### P7 — Waze features, parking, Liquid Glass (done; deployed 2026-10-14, awaiting OK)
+- First deploy before P7: Supabase project `pdajcrlxeqggeucfqmpg` (baseline, then the two P7 migrations run by the owner
+  in the SQL Editor), Worker `map-app` on https://map-app.vasilis-har.workers.dev (secrets SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY, ROUTING_API_KEY = Stadia). Checked live: pages, security headers, sign-in errors from the
+  real Supabase, /api/nav 401 without a session; Stadia answers (Greek search, route, trace_attributes limits) checked
+  directly against Stadia and parsed by our code. NOT checked live: a signed-in trip (needs a real account).
+- New migrations (D11: baseline frozen): `20261014120000_road_catalog.sql`, `20261014130000_parking.sql`.
+- SQL: + road_catalog 14, parking 19 → 240 PASS in all. Unit 50 (+ speed limits 4, traffic 3, recents 2, parking 2,
+  catalog 2). Browser: whole suite PASS — auth 23, map 27, social 25, walkie 12 + 7 + 6 + 13 + 5, nearby 16, nav 48,
+  reports 24, parking 13 (new, 3 phones), release 12 = 231 checks, no page errors.
+- Flow robustness: speed read before the 3 s no-fix drop; Giorgos (background page) re-sends his position; he stands
+  20–40 m ahead at the light (further on is off the top of the close 3D view); the toll check also looks at the browser's
+  request (an earlier run's answer may sit in the edge cache). `tests/e2e/shots.mjs`: light / dark theme screenshots.
+- Not verified: everything on a real iPhone (speed limits / speeding voice on a real drive, the drive-off parking
+  question with real GPS speed, glass rendering + its cost on the GPU), real traffic volumes on the free tiers, Stadia
+  free plan limits (commercial use needs Starter).
